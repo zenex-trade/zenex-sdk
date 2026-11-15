@@ -27,6 +27,9 @@ import {
  *
  * Methods that take a `market` measure against it as passed. Accrue first
  * (`market.accrue(price)`) when you want fill-grade numbers.
+ *
+ * Build one with {@link MarketPosition.from} or {@link MarketPosition.zero}
+ * rather than the positional constructor.
  */
 export class MarketPosition {
     constructor(
@@ -52,7 +55,12 @@ export class MarketPosition {
         public decreaseOrders: number[],
     ) {}
 
-    /** Wrap a parsed storage row (e.g. from an indexer) with its side. */
+    /**
+     * Wrap a parsed storage row (e.g. from an indexer) with its side. This
+     * and {@link MarketPosition.zero} are the stable ways to build a
+     * position: they name every field, where the constructor takes ten
+     * positional arguments whose order may change in a major release.
+     */
     static from(row: Position, isLong: boolean): MarketPosition {
         return new MarketPosition(
             isLong,
@@ -66,6 +74,15 @@ export class MarketPosition {
             row.pricedAt,
             [...row.decreaseOrders],
         );
+    }
+
+    /**
+     * A side with no position: every amount zero and no pending decrease
+     * orders, as the contract's `Position::zeroed`. What a never-opened side
+     * loads as, and the position to preview a first open against.
+     */
+    static zero(isLong: boolean): MarketPosition {
+        return new MarketPosition(isLong, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []);
     }
 
     /** Whether this side carries any size. */

@@ -67,75 +67,184 @@ function zero(value: bigint): bigint {
 }
 
 /**
+ * The fields of a {@link Market} snapshot, as its constructor takes them.
+ * {@link Market.load} fills every one from the ledger. Build one by hand,
+ * for a test or from indexed state, with `new Market({ ... })`, and derive
+ * a changed copy by spreading a snapshot: `new Market({ ...market, status })`.
+ */
+export interface MarketFields {
+    /** The market (trading) contract. */
+    readonly id: string;
+    /** Latest ledger the read closed at. */
+    readonly ledger: number;
+    /** Strategy vault wired to this market (from the instance; authoritative). */
+    readonly vault: string;
+    /** Settlement token (the vault's asset). */
+    readonly token: string;
+    /** Oracle contract. */
+    readonly oracle: string;
+    /** Treasury contract. */
+    readonly treasury: string;
+    /** Current owner, or `undefined` once renounced. */
+    readonly owner?: string;
+    /** 32-byte Data Streams stream id this market prices against. */
+    readonly feedId: Buffer;
+    /** Operational status; only `Active` admits new risk. */
+    readonly status: Status;
+    /** Global trading parameters. */
+    readonly config: MarketConfig;
+    /** The market singleton: open interest, indices, funding. */
+    readonly data: MarketData;
+    /** Per-side ADL flags; a flagged side is closed-only. */
+    readonly adl: AdlState;
+    /**
+     * Flat settlement price of a wound-down market (18-dec), or
+     * `undefined`. Once set, the chain fills, liquidates, accrues and
+     * prices shares at it on both sides, and so does every method of
+     * this tier that reads the market: the caller's price is ignored.
+     */
+    readonly terminalPrice?: bigint;
+    /**
+     * Unix seconds the current wind-down began, or `undefined` outside
+     * one. Past `delistedAt + DELIST_DEADLINE` on a `Delisted` market,
+     * any keeper can liquidate any open position.
+     */
+    readonly delistedAt?: bigint;
+    /** Vault margin balance, token-dec; equals `total_assets()`. */
+    readonly vaultAssets: bigint;
+    /** Vault shares in circulation, share-dec. */
+    readonly vaultShares: bigint;
+    /** Virtual-share decimals offset (share decimals = asset decimals + offset). Every vault stores the contract's fixed offset, 6. */
+    readonly vaultDecimalsOffset: number;
+    /** Settlement-token decimals. */
+    readonly assetDecimals: number;
+    /**
+     * Protocol fee rate (SCALAR_18) the treasury takes from fees, read
+     * from the treasury instance by the load. Previews use it to split
+     * fees and to gate a fill on the settled vault balance (errors 714 and
+     * 753). Share pricing uses it to take the vault's share of pending
+     * borrowing. Required: a rate of `0n` on a market whose treasury takes
+     * a cut overstates a redeem quote, so a hand-built snapshot states it.
+     */
+    readonly treasuryRate: bigint;
+    /**
+     * The oracle's spread reduction (SCALAR_18), read from the oracle
+     * instance by the load: `0` leaves report sides as they are, and
+     * `SCALAR_18` collapses them to the midpoint. Feeds
+     * {@link Market.priceFromReport}. Defaults to `0n` when omitted.
+     */
+    readonly spreadReductionFactor?: bigint;
+}
+
+/**
  * One loaded market: instance config, the market singleton, the vault state
  * it settles against, and the oracle and treasury settings it prices and
- * splits fees with. Plain public fields, one snapshot per load.
+ * splits fees with. Plain readonly fields, one immutable snapshot per load.
+ * It holds no network: reads take one explicitly
+ * (`MarketUser.load(network, market.id, user)`).
  */
-export class Market {
-    constructor(
-        private network: Network,
-        /** The market (trading) contract. */
-        public id: string,
-        /** Latest ledger the read closed at. */
-        public ledger: number,
-        /** Strategy vault wired to this market (from the instance; authoritative). */
-        public vault: string,
-        /** Settlement token (the vault's asset). */
-        public token: string,
-        /** Oracle contract. */
-        public oracle: string,
-        /** Treasury contract. */
-        public treasury: string,
-        /** Current owner, or `undefined` once renounced. */
-        public owner: string | undefined,
-        /** 32-byte Data Streams stream id this market prices against. */
-        public feedId: Buffer,
-        /** Operational status; only `Active` admits new risk. */
-        public status: Status,
-        /** Global trading parameters. */
-        public config: MarketConfig,
-        /** The market singleton: open interest, indices, funding. */
-        public data: MarketData,
-        /** Per-side ADL flags; a flagged side is closed-only. */
-        public adl: AdlState,
-        /**
-         * Flat settlement price of a wound-down market (18-dec), or
-         * `undefined`. Once set, the chain fills, liquidates, accrues and
-         * prices shares at it on both sides, and so does every method of
-         * this tier that reads the market: the caller's price is ignored.
-         */
-        public terminalPrice: bigint | undefined,
-        /**
-         * Unix seconds the current wind-down began, or `undefined` outside
-         * one. Past `delistedAt + DELIST_DEADLINE` on a `Delisted` market,
-         * any keeper can liquidate any open position.
-         */
-        public delistedAt: bigint | undefined,
-        /** Vault margin balance, token-dec; equals `total_assets()`. */
-        public vaultAssets: bigint,
-        /** Vault shares in circulation, share-dec. */
-        public vaultShares: bigint,
-        /** Virtual-share decimals offset (share decimals = asset decimals + offset). Every vault stores the contract's fixed offset, 6. */
-        public vaultDecimalsOffset: number,
-        /** Settlement-token decimals. */
-        public assetDecimals: number,
-        /**
-         * Protocol fee rate (SCALAR_18) the treasury takes from fees, read
-         * from the treasury instance by the load. Previews use it to split
-         * fees and to gate a fill on the settled vault balance (#714, #753).
-         * Share pricing uses it to take the vault's share of pending
-         * borrowing. A directly constructed snapshot defaults to `0n`.
-         */
-        public treasuryRate: bigint = 0n,
-        /**
-         * The oracle's spread reduction (SCALAR_18), read from the oracle
-         * instance by the load: `0` leaves report sides as they are, and
-         * `SCALAR_18` collapses them to the midpoint. Feeds
-         * {@link Market.priceFromReport}. A directly constructed snapshot
-         * defaults to `0n`.
-         */
-        public spreadReductionFactor: bigint = 0n,
-    ) {}
+export class Market implements MarketFields {
+    /** The market (trading) contract. */
+    readonly id: string;
+    /** Latest ledger the read closed at. */
+    readonly ledger: number;
+    /** Strategy vault wired to this market (from the instance; authoritative). */
+    readonly vault: string;
+    /** Settlement token (the vault's asset). */
+    readonly token: string;
+    /** Oracle contract. */
+    readonly oracle: string;
+    /** Treasury contract. */
+    readonly treasury: string;
+    /** Current owner, or `undefined` once renounced. */
+    readonly owner: string | undefined;
+    /** 32-byte Data Streams stream id this market prices against. */
+    readonly feedId: Buffer;
+    /** Operational status; only `Active` admits new risk. */
+    readonly status: Status;
+    /** Global trading parameters. */
+    readonly config: MarketConfig;
+    /** The market singleton: open interest, indices, funding. */
+    readonly data: MarketData;
+    /** Per-side ADL flags; a flagged side is closed-only. */
+    readonly adl: AdlState;
+    /**
+     * Flat settlement price of a wound-down market (18-dec), or
+     * `undefined`. Once set, the chain fills, liquidates, accrues and
+     * prices shares at it on both sides, and so does every method of
+     * this tier that reads the market: the caller's price is ignored.
+     */
+    readonly terminalPrice: bigint | undefined;
+    /**
+     * Unix seconds the current wind-down began, or `undefined` outside
+     * one. Past `delistedAt + DELIST_DEADLINE` on a `Delisted` market,
+     * any keeper can liquidate any open position.
+     */
+    readonly delistedAt: bigint | undefined;
+    /** Vault margin balance, token-dec; equals `total_assets()`. */
+    readonly vaultAssets: bigint;
+    /** Vault shares in circulation, share-dec. */
+    readonly vaultShares: bigint;
+    /** Virtual-share decimals offset (share decimals = asset decimals + offset). Every vault stores the contract's fixed offset, 6. */
+    readonly vaultDecimalsOffset: number;
+    /** Settlement-token decimals. */
+    readonly assetDecimals: number;
+    /**
+     * Protocol fee rate (SCALAR_18) the treasury takes from fees, read
+     * from the treasury instance by the load. Previews use it to split
+     * fees and to gate a fill on the settled vault balance (errors 714 and
+     * 753). Share pricing uses it to take the vault's share of pending
+     * borrowing.
+     */
+    readonly treasuryRate: bigint;
+    /**
+     * The oracle's spread reduction (SCALAR_18), read from the oracle
+     * instance by the load: `0` leaves report sides as they are, and
+     * `SCALAR_18` collapses them to the midpoint. Feeds
+     * {@link Market.priceFromReport}.
+     */
+    readonly spreadReductionFactor: bigint;
+
+    /**
+     * Build a snapshot from its fields. `treasuryRate` is required;
+     * `spreadReductionFactor` defaults to `0n`.
+     * @throws {TypeError} if called without a fields object, such as with
+     *   the positional arguments it took before 1.0.0.
+     */
+    constructor(fields: MarketFields) {
+        // The constructor took positional arguments before 1.0.0. Called
+        // that way from untyped code, it would build a snapshot of
+        // `undefined` fields without a complaint.
+        if (
+            typeof fields !== 'object' ||
+            fields === null ||
+            typeof fields.id !== 'string'
+        ) {
+            throw new TypeError(
+                'new Market() takes one fields object: new Market({ id, ledger, ... })',
+            );
+        }
+        this.id = fields.id;
+        this.ledger = fields.ledger;
+        this.vault = fields.vault;
+        this.token = fields.token;
+        this.oracle = fields.oracle;
+        this.treasury = fields.treasury;
+        this.owner = fields.owner;
+        this.feedId = fields.feedId;
+        this.status = fields.status;
+        this.config = fields.config;
+        this.data = fields.data;
+        this.adl = fields.adl;
+        this.terminalPrice = fields.terminalPrice;
+        this.delistedAt = fields.delistedAt;
+        this.vaultAssets = fields.vaultAssets;
+        this.vaultShares = fields.vaultShares;
+        this.vaultDecimalsOffset = fields.vaultDecimalsOffset;
+        this.assetDecimals = fields.assetDecimals;
+        this.treasuryRate = fields.treasuryRate;
+        this.spreadReductionFactor = fields.spreadReductionFactor ?? 0n;
+    }
 
     /**
      * Load one market: its instance, market data, vault instance and vault
@@ -223,11 +332,6 @@ export class Market {
         };
     }
 
-    /** Read one subject's state on this market. One `getLedgerEntries`. */
-    async loadUser(userId: string): Promise<MarketUser> {
-        return MarketUser.load(this.network, this.id, userId);
-    }
-
     /** This market's display estimate at `price`. Delegates to {@link estimateMarket}. */
     estimate(price: PriceInput): MarketEstimate {
         return estimateMarket(this, price);
@@ -275,7 +379,7 @@ export class Market {
      * Notional (token-dec) the side can still take before a side-level open
      * gate trips: the smaller of the `max_util_open` headroom at `price` and
      * the `max_open_interest` headroom. One order is also capped at
-     * `config.maxPositionNotional` less the position's own notional (#712).
+     * `config.maxPositionNotional` less the position's own notional (error 712).
      */
     openCapacity(isLong: boolean, price: PriceInput): bigint {
         const reserved = sideReserved(this.data, this.priceAt(price), isLong);
@@ -427,40 +531,15 @@ export class Market {
 
     /**
      * A copy of this snapshot carrying `rate` (SCALAR_18) as the treasury fee
-     * rate in place of {@link Market.treasuryRate}. For a snapshot built by
-     * hand, or to preview a rate change.
+     * rate in place of {@link Market.treasuryRate}, to preview a rate change.
      */
     withTreasuryRate(rate: bigint): Market {
-        const copy = this.withData(this.data);
-        copy.treasuryRate = rate;
-        return copy;
+        return new Market({ ...this, treasuryRate: rate });
     }
 
     /** @internal A copy of this snapshot carrying different market data (post-fill projections). */
     withData(data: MarketData): Market {
-        return new Market(
-            this.network,
-            this.id,
-            this.ledger,
-            this.vault,
-            this.token,
-            this.oracle,
-            this.treasury,
-            this.owner,
-            this.feedId,
-            this.status,
-            this.config,
-            data,
-            this.adl,
-            this.terminalPrice,
-            this.delistedAt,
-            this.vaultAssets,
-            this.vaultShares,
-            this.vaultDecimalsOffset,
-            this.assetDecimals,
-            this.treasuryRate,
-            this.spreadReductionFactor,
-        );
+        return new Market({ ...this, data });
     }
 
     /** @internal The engine's atomic vault triple. */
@@ -612,27 +691,26 @@ async function decodeMarket(
 
     const links = await readLinks(network, contracts, instance, batch);
 
-    return new Market(
-        network,
-        contracts.market,
-        batch.ledger,
-        instance.vault,
-        instance.token,
-        instance.oracle,
-        instance.treasury,
-        instance.owner,
-        instance.feedId,
-        instance.status,
-        instance.config,
+    return new Market({
+        id: contracts.market,
+        ledger: batch.ledger,
+        vault: instance.vault,
+        token: instance.token,
+        oracle: instance.oracle,
+        treasury: instance.treasury,
+        owner: instance.owner,
+        feedId: instance.feedId,
+        status: instance.status,
+        config: instance.config,
         data,
-        instance.adl,
-        instance.terminalPrice,
-        instance.delistedAt,
+        adl: instance.adl,
+        terminalPrice: instance.terminalPrice,
+        delistedAt: instance.delistedAt,
         vaultAssets,
-        vaultInstance.totalSharesAtomic,
-        vaultInstance.decimalsOffset,
-        vaultInstance.assetDecimals,
-        links.treasuryRate,
-        links.spreadReductionFactor,
-    );
+        vaultShares: vaultInstance.totalSharesAtomic,
+        vaultDecimalsOffset: vaultInstance.decimalsOffset,
+        assetDecimals: vaultInstance.assetDecimals,
+        treasuryRate: links.treasuryRate,
+        spreadReductionFactor: links.spreadReductionFactor,
+    });
 }

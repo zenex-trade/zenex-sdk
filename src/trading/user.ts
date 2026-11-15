@@ -32,15 +32,14 @@ const DEFAULT_ORDER_LOOKBACK = 50;
 /** Per-request key budget the RPC tolerates; 2 keys per probed id. */
 const MAX_ORDER_LOOKBACK = 90;
 
-/** A never-opened side reads as the contract's `Position::zeroed`. */
-function zeroPosition(isLong: boolean): MarketPosition {
-    return new MarketPosition(isLong, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []);
-}
-
 /**
  * One subject's state on one market: both stored positions, the order
  * counter, and claimable funding. Plain public fields. Pairing a user with
  * the market it was read against is the caller's responsibility.
+ *
+ * Read one with {@link MarketUser.load} or `Market.loadWithUser` rather than
+ * the positional constructor, whose argument order may change in a major
+ * release.
  */
 export class MarketUser {
     constructor(
@@ -213,7 +212,7 @@ export function decodeUser(
         const value = read(name);
         return value
             ? MarketPosition.from(parsePosition(scValToNative(value)), isLong)
-            : zeroPosition(isLong);
+            : MarketPosition.zero(isLong);
     };
 
     const long = side('long', true);

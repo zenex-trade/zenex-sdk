@@ -11,6 +11,10 @@ import * as SDK from '../src/index.js';
 // decoder functions that produce them.
 // =============================================================================
 
+// The same barrel, untyped, for asserting that a removed name stays absent.
+const surface = SDK as unknown as Record<string, unknown>;
+const fixedMath = SDK.FixedMath as unknown as Record<string, unknown>;
+
 describe('package root exports', () => {
     it('exports every contract class', () => {
         expect(SDK.MarketContract).toBeTypeOf('function');
@@ -106,15 +110,15 @@ describe('package root exports', () => {
         expect(SDK.MarketEventType.IncreaseFill).toBe('increase_fill');
         expect(SDK.MarketEventType.DecreaseFill).toBe('decrease_fill');
         expect(SDK.MarketEventType.Liquidation).toBe('liquidation');
-        expect(SDK.decodeMarketEvent).toBeUndefined();
+        expect(surface.decodeMarketEvent).toBeUndefined();
         // Bare #[contractevent] name topics are snake_case of the struct name.
         expect(SDK.VaultEventType.Deposit).toBe('deposit');
         expect(SDK.VaultEventType.Withdraw).toBe('withdraw');
         expect(SDK.VaultEventType.StrategyWithdraw).toBe('strategy_withdraw');
-        expect(SDK.decodeVaultEvent).toBeUndefined();
+        expect(surface.decodeVaultEvent).toBeUndefined();
         expect(SDK.GovernanceEventType.Queued).toBe('queued');
         expect(SDK.GovernanceEventType.StatusSet).toBe('status_set');
-        expect(SDK.decodeGovernanceEvent).toBeUndefined();
+        expect(surface.decodeGovernanceEvent).toBeUndefined();
         expect(SDK.FactoryEventType.Deploy).toBe('deploy');
         expect(SDK.FactoryEventType.InitMetaUpdate).toBe('init_meta_update');
         expect(SDK.FeeForwarderEventType.FeeCollected).toBe('fee_collected');
@@ -128,10 +132,10 @@ describe('package root exports', () => {
         expect(SDK.ZenexContractType.Treasury).toBe('treasury');
         expect(SDK.ZenexContractType.FeeForwarder).toBe('fee_forwarder');
         // The event surface is types-only; consumers own their decode path.
-        expect(SDK.decodeEvent).toBeUndefined();
-        expect(SDK.normalizeRpc).toBeUndefined();
-        expect(SDK.normalizeMercury).toBeUndefined();
-        expect(SDK.normalizeGoldsky).toBeUndefined();
+        expect(surface.decodeEvent).toBeUndefined();
+        expect(surface.normalizeRpc).toBeUndefined();
+        expect(surface.normalizeMercury).toBeUndefined();
+        expect(surface.normalizeGoldsky).toBeUndefined();
     });
 
     it('carries only the contract ABI event kinds', () => {
@@ -153,13 +157,13 @@ describe('package root exports', () => {
         expect(SDK.callToScVal).toBeTypeOf('function');
         expect(SDK.createOrderCall).toBeTypeOf('function');
         expect(SDK.parseCallOutcome).toBeTypeOf('function');
-        expect(SDK.parseFillAttempt).toBeUndefined();
-        expect(SDK.adlTargetToScVal).toBeUndefined();
+        expect(surface.parseFillAttempt).toBeUndefined();
+        expect(surface.adlTargetToScVal).toBeUndefined();
     });
 
     it('does not export the removed token approve/bundle helpers', () => {
-        expect(SDK.approveCall).toBeUndefined();
-        expect(SDK.approveAndOrder).toBeUndefined();
+        expect(surface.approveCall).toBeUndefined();
+        expect(surface.approveAndOrder).toBeUndefined();
     });
 
     it('exports the errors and response parsing surface', () => {
@@ -226,11 +230,11 @@ describe('package root exports', () => {
         expect(SDK.toFloat).toBeTypeOf('function');
         expect(SDK.simulateAndParse).toBeTypeOf('function');
         // Not part of the public surface:
-        expect(SDK.getAssetKey).toBeUndefined();
-        expect(SDK.assetFromKey).toBeUndefined();
-        expect(SDK.FixedMath.mulFloor).toBeUndefined();
-        expect(SDK.FixedMath.divFloor).toBeUndefined();
-        expect(SDK.VaultState).toBeUndefined();
+        expect(surface.getAssetKey).toBeUndefined();
+        expect(surface.assetFromKey).toBeUndefined();
+        expect(fixedMath.mulFloor).toBeUndefined();
+        expect(fixedMath.divFloor).toBeUndefined();
+        expect(surface.VaultState).toBeUndefined();
     });
 
     it('exports the loaded classes, intents, and order helpers', () => {
@@ -245,7 +249,10 @@ describe('package root exports', () => {
         expect(SDK.loadTreasuryInstance).toBeTypeOf('function');
         expect(SDK.MarketStateError).toBeTypeOf('function');
         // The loaded-class surface.
-        expect(SDK.Market.prototype.loadUser).toBeTypeOf('function');
+        // `loadUser` is gone with the snapshot's network: `MarketUser.load` reads a user.
+        expect('loadUser' in SDK.Market.prototype).toBe(false);
+        expect(SDK.MarketUser.load).toBeTypeOf('function');
+        expect(SDK.MarketPosition.zero).toBeTypeOf('function');
         expect(SDK.Market.prototype.estimate).toBeTypeOf('function');
         expect(SDK.Market.prototype.accrue).toBeTypeOf('function');
         expect(SDK.Market.prototype.openCapacity).toBeTypeOf('function');
@@ -267,9 +274,9 @@ describe('package root exports', () => {
         expect(sdk.MAX_KEYS_PER_REQUEST).toBeUndefined();
         expect(sdk.marketKeys).toBeUndefined();
         expect(sdk.marketUserKeys).toBeUndefined();
-        expect((SDK.Market as Record<string, unknown>).loadMany).toBeUndefined();
+        expect((SDK.Market as unknown as Record<string, unknown>).loadMany).toBeUndefined();
         expect(
-            (SDK.MarketUser as Record<string, unknown>).loadMany,
+            (SDK.MarketUser as unknown as Record<string, unknown>).loadMany,
         ).toBeUndefined();
         // The display module and the old execution machinery are gone.
         expect(sdk.Display).toBeUndefined();

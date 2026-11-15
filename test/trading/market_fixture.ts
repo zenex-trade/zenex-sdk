@@ -176,33 +176,32 @@ export interface MarketFixture {
 /** A loaded `Market`, built by constructor on the contract `test_config`. */
 export function fixtureMarket(fixture: MarketFixture = {}): Market {
     const vaultAssets = fixture.vaultAssets ?? unit(1000);
-    return new Market(
-        NETWORK,
-        MARKET,
-        fixture.ledger ?? 100,
-        VAULT,
-        TOKEN,
-        ORACLE,
-        TREASURY,
-        undefined,
-        Buffer.alloc(32, 1),
-        fixture.status ?? Status.Active,
-        contractTestConfig(fixture.config),
-        marketData(fixture.data),
-        fixture.adl ?? { long: false, short: false },
-        fixture.terminalPrice,
-        fixture.delistedAt,
+    return new Market({
+        id: MARKET,
+        ledger: fixture.ledger ?? 100,
+        vault: VAULT,
+        token: TOKEN,
+        oracle: ORACLE,
+        treasury: TREASURY,
+        owner: undefined,
+        feedId: Buffer.alloc(32, 1),
+        status: fixture.status ?? Status.Active,
+        config: contractTestConfig(fixture.config),
+        data: marketData(fixture.data),
+        adl: fixture.adl ?? { long: false, short: false },
+        terminalPrice: fixture.terminalPrice,
+        delistedAt: fixture.delistedAt,
         vaultAssets,
-        fixture.vaultShares ?? vaultAssets * SHARE_SCALE,
-        SHARE_DECIMALS_OFFSET,
-        TOKEN_DECIMALS,
-        fixture.treasuryRate ?? 0n,
-    );
+        vaultShares: fixture.vaultShares ?? vaultAssets * SHARE_SCALE,
+        vaultDecimalsOffset: SHARE_DECIMALS_OFFSET,
+        assetDecimals: TOKEN_DECIMALS,
+        treasuryRate: fixture.treasuryRate ?? 0n,
+    });
 }
 
 /** A side with no stored size, as `MarketUser.load` reads a never-opened row. */
 export function flatPosition(isLong = true): MarketPosition {
-    return new MarketPosition(isLong, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []);
+    return MarketPosition.zero(isLong);
 }
 
 /**

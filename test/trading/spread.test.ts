@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SCALAR_18 } from '../../src/math/fixed.js';
 import * as SDK from '../../src/index.js';
+import { Market } from '../../src/trading/market.js';
 import { Price, reduceSpread } from '../../src/trading/price.js';
 import { OrderIntent, previewOrder } from '../../src/trading/order.js';
 import { formatPrice, formatToken } from '../../src/float.js';
@@ -64,8 +65,10 @@ describe('a raw report priced the way the chain prices it', () => {
     });
 
     it('builds the price from the market factor', () => {
-        const market = fixtureMarket();
-        market.spreadReductionFactor = MAINNET_SPREAD_REDUCTION;
+        const market = new Market({
+            ...fixtureMarket(),
+            spreadReductionFactor: MAINNET_SPREAD_REDUCTION,
+        });
         expect(market.priceFromReport(RAW_BID, RAW_ASK, 77n)).toEqual(
             new Price(CHAIN_BID, CHAIN_ASK, 77n),
         );
@@ -76,11 +79,13 @@ describe('a raw report priced the way the chain prices it', () => {
     });
 
     it('previews the fill the chain makes on the reduced ask', () => {
-        const market = fixtureMarket({
-            vaultAssets: unit(1_000_000),
-            config: { impactScalar: unit(100_000_000) },
+        const market = new Market({
+            ...fixtureMarket({
+                vaultAssets: unit(1_000_000),
+                config: { impactScalar: unit(100_000_000) },
+            }),
+            spreadReductionFactor: MAINNET_SPREAD_REDUCTION,
         });
-        market.spreadReductionFactor = MAINNET_SPREAD_REDUCTION;
         const notional = unit(10_000);
         const order = new OrderIntent(market, USER, true).openMarket({
             notional,

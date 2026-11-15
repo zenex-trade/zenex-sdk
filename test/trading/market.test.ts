@@ -26,6 +26,7 @@ import {
     unit,
 } from './market_fixture.js';
 import { OrderIntent, previewOrder } from '../../src/trading/order.js';
+import { MarketPosition } from '../../src/trading/position.js';
 
 const MARKET = StrKey.encodeContract(Buffer.alloc(32, 1));
 const MARKET_B = StrKey.encodeContract(Buffer.alloc(32, 9));
@@ -359,6 +360,85 @@ describe('Market accessors', () => {
     });
 });
 
+describe('Market constructor (one fields object)', () => {
+    const fields = {
+        id: MARKET,
+        ledger: 7,
+        vault: VAULT,
+        token: TOKEN,
+        oracle: ORACLE,
+        treasury: TREASURY,
+        feedId: Buffer.from(TEST_FEED_ID),
+        status: Status.Active,
+        config: makeConfig(),
+        data: fixtureMarket().data,
+        adl: { long: false, short: false },
+        vaultAssets: unit(1000),
+        vaultShares: unit(1000) * 1_000_000n,
+        vaultDecimalsOffset: 6,
+        assetDecimals: 7,
+        treasuryRate: 5n * 10n ** 16n,
+    };
+
+    it('builds a snapshot from named fields', () => {
+        const market = new Market(fields);
+        expect(market.id).toBe(MARKET);
+        expect(market.ledger).toBe(7);
+        expect(market.treasuryRate).toBe(5n * 10n ** 16n);
+        // The optional fields read undefined, and the spread reduction 0.
+        expect(market.owner).toBeUndefined();
+        expect(market.terminalPrice).toBeUndefined();
+        expect(market.delistedAt).toBeUndefined();
+        expect(market.spreadReductionFactor).toBe(0n);
+    });
+
+    it('requires the treasury rate', () => {
+        const { treasuryRate: _rate, ...rest } = fields;
+        // @ts-expect-error treasuryRate has no default: a 0 rate overstates a redeem quote.
+        expect(new Market(rest).treasuryRate).toBeUndefined();
+    });
+
+    it('rejects the positional arguments it took before 1.0.0', () => {
+        const positional = Market as unknown as new (...args: unknown[]) => Market;
+        expect(() => new positional(network, MARKET, 7, VAULT, TOKEN)).toThrow(TypeError);
+        expect(() => new positional()).toThrow(/takes one fields object/);
+    });
+
+    it('holds no network, only the snapshot fields', () => {
+        const market = new Market(fields);
+        expect('network' in market).toBe(false);
+        expect(Object.keys(market).sort()).toEqual([
+            'adl', 'assetDecimals', 'config', 'data', 'delistedAt', 'feedId', 'id',
+            'ledger', 'oracle', 'owner', 'spreadReductionFactor', 'status',
+            'terminalPrice', 'token', 'treasury', 'treasuryRate', 'vault',
+            'vaultAssets', 'vaultDecimalsOffset', 'vaultShares',
+        ]);
+    });
+
+    it('derives a changed copy by spreading a snapshot', () => {
+        const market = new Market(fields);
+        const frozen = new Market({ ...market, status: Status.Frozen });
+        expect(frozen.status).toBe(Status.Frozen);
+        expect(market.status).toBe(Status.Active);
+        expect(frozen.data).toBe(market.data);
+        expect(frozen).toBeInstanceOf(Market);
+    });
+
+    it('declares its fields readonly', () => {
+        const market = new Market(fields);
+        // @ts-expect-error fields are readonly: build a new snapshot instead.
+        const assign = () => { market.status = Status.Frozen; };
+        expect(assign).toBeTypeOf('function');
+    });
+
+    it('withTreasuryRate copies every field and changes the rate', () => {
+        const market = new Market({ ...fields, spreadReductionFactor: 3n, owner: USER });
+        const rated = market.withTreasuryRate(1n);
+        expect(rated.treasuryRate).toBe(1n);
+        expect({ ...rated, treasuryRate: market.treasuryRate }).toEqual({ ...market });
+    });
+});
+
 describe('the treasury rate in previews', () => {
     // The treasury's cut leaves the vault, so the settled balance that gates
     // an open (#714) is smaller at a nonzero rate. A load reads the live rate;
@@ -388,5 +468,36 @@ describe('the treasury rate in previews', () => {
         expect(outcome(0n, low).outcome).toBe('fills');
         expect(outcome(0n, low + 1n).gate?.code).toBe(714);
         expect(outcome(3n * 10n ** 17n, low).gate?.code).toBe(714);
+    });
+});
+
+describe('MarketPosition.zero', () => {
+    it('is the contract Position::zeroed for the side', () => {
+        const long = MarketPosition.zero(true);
+        expect(long).toEqual(
+            MarketPosition.from(
+                {
+                    margin: 0n,
+                    notional: 0n,
+                    tokens: 0n,
+                    fundingIdx: 0n,
+                    borrowingIdx: 0n,
+                    lockedNotional: 0n,
+                    unlocksAt: 0n,
+                    pricedAt: 0n,
+                    decreaseOrders: [],
+                },
+                true,
+            ),
+        );
+        expect(long.isLong).toBe(true);
+        expect(long.isOpen()).toBe(false);
+        expect(MarketPosition.zero(false).isLong).toBe(false);
+    });
+
+    it('gives each call its own decreaseOrders array', () => {
+        expect(MarketPosition.zero(true).decreaseOrders).not.toBe(
+            MarketPosition.zero(true).decreaseOrders,
+        );
     });
 });

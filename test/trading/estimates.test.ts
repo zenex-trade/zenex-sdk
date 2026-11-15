@@ -70,27 +70,24 @@ function loadedMarket(
     config: Partial<MarketConfig> = {},
     vaultAssets: bigint = unit(1000),
 ): Market {
-    return new Market(
-        NETWORK,
-        MARKET,
-        100,
-        VAULT,
-        TOKEN,
-        ORACLE,
-        TREASURY,
-        undefined,
-        Buffer.alloc(32, 1),
-        Status.Active,
-        { ...makeConfig(), ...config },
-        marketData(data),
-        { long: false, short: false },
-        undefined,
-        undefined,
+    return new Market({
+        id: MARKET,
+        ledger: 100,
+        vault: VAULT,
+        token: TOKEN,
+        oracle: ORACLE,
+        treasury: TREASURY,
+        feedId: Buffer.alloc(32, 1),
+        status: Status.Active,
+        config: { ...makeConfig(), ...config },
+        data: marketData(data),
+        adl: { long: false, short: false },
         vaultAssets,
-        vaultAssets * SHARE_SCALE,
-        SHARE_DECIMALS_OFFSET,
-        TOKEN_DECIMALS,
-    );
+        vaultShares: vaultAssets * SHARE_SCALE,
+        vaultDecimalsOffset: SHARE_DECIMALS_OFFSET,
+        assetDecimals: TOKEN_DECIMALS,
+        treasuryRate: 0n,
+    });
 }
 
 /** A market whose aggregates carry the standard long position. */

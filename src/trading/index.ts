@@ -5,7 +5,7 @@ export { loadTreasuryInstance, loadTreasuryRate } from './treasury.js';
 export { Price, reduceSpread } from './price.js';
 export type { PriceInput } from './price.js';
 export { Market } from './market.js';
-export type { MarketContracts } from './market.js';
+export type { MarketContracts, MarketFields } from './market.js';
 export { MarketUser } from './user.js';
 export type { MarketUserEntry, PendingOrder } from './user.js';
 export { MarketPosition } from './position.js';
