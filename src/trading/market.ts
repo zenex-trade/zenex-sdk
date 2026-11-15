@@ -34,6 +34,7 @@ import {
 } from './internal/vault.js';
 import type { VaultAtomicState } from './internal/vault.js';
 import type { PriceData } from './internal/math.js';
+import { requireFields } from './internal/fields.js';
 import { Buffer } from 'buffer';
 
 /**
@@ -154,10 +155,33 @@ export interface MarketFields {
      * The oracle's spread reduction (SCALAR_18), read from the oracle
      * instance by the load: `0` leaves report sides as they are, and
      * `SCALAR_18` collapses them to the midpoint. Feeds
-     * {@link Market.priceFromReport}. Defaults to `0n` when omitted.
+     * {@link Market.priceFromReport}. Required: a factor of `0n` on a market
+     * whose oracle narrows the spread prices a report wider than the chain
+     * fills it, so a hand-built snapshot states it.
      */
-    readonly spreadReductionFactor?: bigint;
+    readonly spreadReductionFactor: bigint;
 }
+
+/** The fields `new Market()` cannot do without, in declaration order. */
+const REQUIRED_FIELDS = [
+    'id',
+    'ledger',
+    'vault',
+    'token',
+    'oracle',
+    'treasury',
+    'feedId',
+    'status',
+    'config',
+    'data',
+    'adl',
+    'vaultAssets',
+    'vaultShares',
+    'vaultDecimalsOffset',
+    'assetDecimals',
+    'treasuryRate',
+    'spreadReductionFactor',
+] as const satisfies readonly (keyof MarketFields)[];
 
 /**
  * One loaded market: instance config, the market singleton, the vault state
@@ -230,23 +254,17 @@ export class Market implements MarketFields {
     readonly spreadReductionFactor: bigint;
 
     /**
-     * Build a snapshot from its fields. `treasuryRate` is required;
-     * `spreadReductionFactor` defaults to `0n`. `config`, `data`, `adl` and
-     * `feedId` are copied, and the first three are frozen: a write to one of
-     * their fields throws in strict mode, and the caller's own objects stay
-     * writable and detached from the snapshot.
+     * Build a snapshot from its fields. Every field is required except
+     * `owner`, `terminalPrice` and `delistedAt`, which a market can lack.
+     * `config`, `data`, `adl` and `feedId` are copied, and the first three
+     * are frozen: a write to one of their fields throws in strict mode, and
+     * the caller's own objects stay writable and detached from the snapshot.
      * @throws {TypeError} if called without a fields object, such as with
-     *   the positional arguments it took before 1.0.0.
+     *   the positional arguments it took before 1.0.0, or with a required
+     *   field missing; the message names the first one.
      */
     constructor(fields: MarketFields) {
-        // The constructor took positional arguments before 1.0.0. Called
-        // that way from untyped code, it would build a snapshot of
-        // `undefined` fields without a complaint.
-        if (typeof fields !== 'object' || fields === null || typeof fields.id !== 'string') {
-            throw new TypeError(
-                'new Market() takes one fields object: new Market({ id, ledger, ... })',
-            );
-        }
+        requireFields('Market', 'new Market({ id, ledger, ... })', fields, REQUIRED_FIELDS);
         this.id = fields.id;
         this.ledger = fields.ledger;
         this.vault = fields.vault;
@@ -272,7 +290,7 @@ export class Market implements MarketFields {
         this.vaultDecimalsOffset = fields.vaultDecimalsOffset;
         this.assetDecimals = fields.assetDecimals;
         this.treasuryRate = fields.treasuryRate;
-        this.spreadReductionFactor = fields.spreadReductionFactor ?? 0n;
+        this.spreadReductionFactor = fields.spreadReductionFactor;
     }
 
     /**

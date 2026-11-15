@@ -13,6 +13,7 @@ import { readEntries } from '../entries.js';
 import type { EntryBatch } from '../entries.js';
 import type { Market } from './market.js';
 import { MarketPosition } from './position.js';
+import { requireFields } from './internal/fields.js';
 
 /**
  * One live entry in a user's shared order-id space: a keeper trade order or
@@ -62,6 +63,16 @@ export interface MarketUserFields {
     readonly archived?: readonly MarketUserEntry[];
 }
 
+/** The fields `new MarketUser()` cannot do without, in declaration order. */
+const REQUIRED_FIELDS = [
+    'marketId',
+    'userId',
+    'long',
+    'short',
+    'orderCounter',
+    'claimableCredit',
+] as const satisfies readonly (keyof MarketUserFields)[];
+
 /**
  * One subject's state on one market: both stored positions, the order
  * counter, and claimable funding. Plain readonly fields. Pairing a user
@@ -97,15 +108,27 @@ export class MarketUser implements MarketUserFields {
     /**
      * Build a user's state from its fields. `archived` defaults to none.
      * @throws {TypeError} if called without a fields object, such as with
-     *   the positional arguments it took before 1.0.0.
+     *   the positional arguments it took before 1.0.0; with a required field
+     *   missing, naming the first one; or when `long` is not a long position
+     *   or `short` not a short one.
      */
     constructor(fields: MarketUserFields) {
-        // The constructor took positional arguments before 1.0.0. Called
-        // that way from untyped code, it would build a user of `undefined`
-        // fields without a complaint.
-        if (typeof fields !== 'object' || fields === null || typeof fields.marketId !== 'string') {
+        requireFields(
+            'MarketUser',
+            'new MarketUser({ marketId, userId, ... })',
+            fields,
+            REQUIRED_FIELDS,
+        );
+        // Every method of a position reads its own side, so a position
+        // under the wrong name would quote the other side's numbers.
+        if (fields.long.isLong !== true) {
             throw new TypeError(
-                'new MarketUser() takes one fields object: new MarketUser({ marketId, userId, ... })',
+                "new MarketUser() field 'long' must be a long position (isLong: true)",
+            );
+        }
+        if (fields.short.isLong !== false) {
+            throw new TypeError(
+                "new MarketUser() field 'short' must be a short position (isLong: false)",
             );
         }
         this.marketId = fields.marketId;

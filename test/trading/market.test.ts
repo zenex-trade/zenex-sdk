@@ -18,7 +18,16 @@ import {
     ledgerEntryFor,
     TEST_FEED_ID,
 } from '../helpers/market_state.js';
-import { USER, fixtureMarket, flatPosition, linkedEntries, px, unit } from './market_fixture.js';
+import {
+    USER,
+    fixtureMarket,
+    flatPosition,
+    linkedEntries,
+    loneBook,
+    lonePosition,
+    px,
+    unit,
+} from './market_fixture.js';
 import { OrderIntent, previewOrder } from '../../src/trading/order.js';
 import { MarketPosition } from '../../src/trading/position.js';
 
@@ -366,6 +375,7 @@ describe('Market constructor (one fields object)', () => {
         vaultDecimalsOffset: 6,
         assetDecimals: 7,
         treasuryRate: 5n * 10n ** 16n,
+        spreadReductionFactor: 0n,
     };
 
     it('builds a snapshot from named fields', () => {
@@ -373,17 +383,42 @@ describe('Market constructor (one fields object)', () => {
         expect(market.id).toBe(MARKET);
         expect(market.ledger).toBe(7);
         expect(market.treasuryRate).toBe(5n * 10n ** 16n);
-        // The optional fields read undefined, and the spread reduction 0.
+        expect(market.spreadReductionFactor).toBe(0n);
+        // The optional fields read undefined.
         expect(market.owner).toBeUndefined();
         expect(market.terminalPrice).toBeUndefined();
         expect(market.delistedAt).toBeUndefined();
-        expect(market.spreadReductionFactor).toBe(0n);
     });
 
     it('requires the treasury rate', () => {
         const { treasuryRate: _rate, ...rest } = fields;
         // @ts-expect-error treasuryRate has no default: a 0 rate overstates a redeem quote.
-        expect(new Market(rest).treasuryRate).toBeUndefined();
+        expect(() => new Market(rest)).toThrow(TypeError);
+    });
+
+    it('requires the spread reduction factor', () => {
+        const { spreadReductionFactor: _factor, ...rest } = fields;
+        // @ts-expect-error spreadReductionFactor has no default: a 0 factor
+        // prices a report wider than a narrowing oracle fills it.
+        expect(() => new Market(rest)).toThrow(
+            "new Market() is missing the required field 'spreadReductionFactor'",
+        );
+    });
+
+    it('names the first missing required field', () => {
+        const untyped = Market as unknown as new (fields: object) => Market;
+        const { feedId: _feed, config: _config, ...rest } = fields;
+        expect(() => new untyped(rest)).toThrow(TypeError);
+        expect(() => new untyped(rest)).toThrow(
+            "new Market() is missing the required field 'feedId'",
+        );
+        expect(() => new untyped({})).toThrow("new Market() is missing the required field 'id'");
+        expect(() => new untyped({ ...fields, data: undefined })).toThrow(
+            "new Market() is missing the required field 'data'",
+        );
+        // The three a market can lack stay optional.
+        const optional = { owner: undefined, terminalPrice: undefined, delistedAt: undefined };
+        expect(new untyped({ ...fields, ...optional })).toBeInstanceOf(Market);
     });
 
     it('rejects the positional arguments it took before 1.0.0', () => {
@@ -555,17 +590,51 @@ describe('MarketPosition constructor (one fields object)', () => {
         expect(MarketPosition.from(row, isLong)).toEqual(new MarketPosition(fields));
     });
 
-    it('owns its decreaseOrders: neither the fields passed in nor a derived position can change it', () => {
+    it('owns a frozen copy of decreaseOrders: neither the fields passed in nor a derived position can change it', () => {
         const decreaseOrders = [8, 9];
         const position = new MarketPosition({ ...fields, decreaseOrders });
         decreaseOrders.push(10);
+        expect(position.decreaseOrders).toEqual([8, 9]);
+        expect(Object.isFrozen(position.decreaseOrders)).toBe(true);
+        // The caller's array stays writable.
+        expect(Object.isFrozen(decreaseOrders)).toBe(false);
+
+        // @ts-expect-error the list is readonly: derive a copy instead.
+        expect(() => position.decreaseOrders.push(11)).toThrow(TypeError);
         expect(position.decreaseOrders).toEqual([8, 9]);
 
         const derived = new MarketPosition({ ...position, margin: unit(20) });
         expect(derived.margin).toBe(unit(20));
         expect(position.margin).toBe(unit(10));
-        derived.decreaseOrders.push(11);
+        expect(derived.decreaseOrders).not.toBe(position.decreaseOrders);
+        expect(Object.isFrozen(derived.decreaseOrders)).toBe(true);
+        expect(Object.isFrozen(MarketPosition.zero(true).decreaseOrders)).toBe(true);
+    });
+
+    it('fills against a frozen list: the engine works on its own copy', () => {
+        const market = fixtureMarket({ data: loneBook() });
+        const position = lonePosition({ decreaseOrders: [8, 9] });
+        expect(Object.isFrozen(position.decreaseOrders)).toBe(true);
+        const close = new OrderIntent(market, USER, true).closePosition();
+        const preview = position.preview(market, close, px(10), 1n);
+        expect(preview.outcome).toBe('fills');
         expect(position.decreaseOrders).toEqual([8, 9]);
+    });
+
+    it('names the first missing field', () => {
+        const untyped = MarketPosition as unknown as new (fields: object) => MarketPosition;
+        const { tokens: _tokens, decreaseOrders: _orders, ...rest } = fields;
+        expect(() => new untyped(rest)).toThrow(TypeError);
+        expect(() => new untyped(rest)).toThrow(
+            "new MarketPosition() is missing the required field 'tokens'",
+        );
+        const { decreaseOrders: _list, ...noOrders } = fields;
+        expect(() => new untyped(noOrders)).toThrow(
+            "new MarketPosition() is missing the required field 'decreaseOrders'",
+        );
+        expect(() => new untyped({})).toThrow(
+            "new MarketPosition() is missing the required field 'isLong'",
+        );
     });
 
     it('takes a readonly list of order ids', () => {

@@ -115,8 +115,8 @@ export interface Position {
     unlocksAt: u64;
     /** publish_time of the last fill's price, unix seconds; force-close anti-replay floor. */
     pricedAt: u64;
-    /** Pending decrease order ids on the side, max `MAX_ORDERS_PER_SIDE`; cleared when the position closes. */
-    decreaseOrders: u32[];
+    /** Pending decrease order ids on the side, max `MAX_ORDERS_PER_SIDE`; cleared when the position closes. Read-only: replace the list to change it. */
+    decreaseOrders: readonly u32[];
 }
 
 /** A long/short pair of `i128` values, used for per-side open interest, posted margin, and base size. */

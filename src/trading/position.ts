@@ -8,6 +8,7 @@ import type { PositionEstimate } from './position_est.js';
 import { estimatePosition } from './position_est.js';
 import type { PriceInput } from './price.js';
 import { marketPrice, quoteTime, resolvePrice, wallClock } from './price.js';
+import { requireFields } from './internal/fields.js';
 import { exitPrice } from './internal/math.js';
 import {
     impliedEntryPrice,
@@ -48,6 +49,20 @@ export interface MarketPositionFields {
     readonly decreaseOrders: readonly number[];
 }
 
+/** The fields `new MarketPosition()` cannot do without: all of them, in declaration order. */
+const REQUIRED_FIELDS = [
+    'isLong',
+    'margin',
+    'notional',
+    'tokens',
+    'fundingIdx',
+    'borrowingIdx',
+    'lockedNotional',
+    'unlocksAt',
+    'pricedAt',
+    'decreaseOrders',
+] as const satisfies readonly (keyof MarketPositionFields)[];
+
 /**
  * One stored position that knows its side. `MarketUser.load` stamps `isLong`
  * from the storage key it read, so the methods never ask for it. All exact
@@ -80,23 +95,23 @@ export class MarketPosition implements MarketPositionFields {
     readonly unlocksAt: bigint;
     /** Unix seconds of the last pricing touch. */
     readonly pricedAt: bigint;
-    /** Ids of pending decrease orders riding this side. The position's own copy of the list. */
-    readonly decreaseOrders: number[];
+    /** Ids of pending decrease orders riding this side. The position's own frozen copy of the list. */
+    readonly decreaseOrders: readonly number[];
 
     /**
-     * Build a position from its fields. `decreaseOrders` is copied.
+     * Build a position from its fields. `decreaseOrders` is copied and the
+     * copy frozen.
      * @throws {TypeError} if called without a fields object, such as with
-     *   the positional arguments it took before 1.0.0.
+     *   the positional arguments it took before 1.0.0, or with a field
+     *   missing; the message names the first one.
      */
     constructor(fields: MarketPositionFields) {
-        // The constructor took ten positional arguments before 1.0.0.
-        // Called that way from untyped code, it would build a position of
-        // `undefined` fields without a complaint.
-        if (typeof fields !== 'object' || fields === null || typeof fields.isLong !== 'boolean') {
-            throw new TypeError(
-                'new MarketPosition() takes one fields object: new MarketPosition({ isLong, margin, ... })',
-            );
-        }
+        requireFields(
+            'MarketPosition',
+            'new MarketPosition({ isLong, margin, ... })',
+            fields,
+            REQUIRED_FIELDS,
+        );
         this.isLong = fields.isLong;
         this.margin = fields.margin;
         this.notional = fields.notional;
@@ -106,9 +121,10 @@ export class MarketPosition implements MarketPositionFields {
         this.lockedNotional = fields.lockedNotional;
         this.unlocksAt = fields.unlocksAt;
         this.pricedAt = fields.pricedAt;
-        // The position owns its list, so a later write to the caller's
-        // array, or to a position derived from this one, cannot change it.
-        this.decreaseOrders = [...fields.decreaseOrders];
+        // The position owns its list, a frozen copy: a later write to the
+        // caller's array cannot change it, and a write to the list itself
+        // throws.
+        this.decreaseOrders = Object.freeze([...fields.decreaseOrders]);
     }
 
     /** Wrap a parsed storage row (e.g. from an indexer) with its side. */

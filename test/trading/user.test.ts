@@ -540,6 +540,34 @@ describe('MarketUser constructor (one fields object)', () => {
         expect(user.claimableCredit).toBe(5n);
     });
 
+    it('rejects a position on the wrong side', () => {
+        const long = MarketPosition.zero(true);
+        const short = MarketPosition.zero(false);
+        expect(() => new MarketUser({ ...fields, long: short })).toThrow(TypeError);
+        expect(() => new MarketUser({ ...fields, long: short })).toThrow(
+            "new MarketUser() field 'long' must be a long position (isLong: true)",
+        );
+        expect(() => new MarketUser({ ...fields, short: long })).toThrow(
+            "new MarketUser() field 'short' must be a short position (isLong: false)",
+        );
+        // Swapped, each is wrong, and the long one is reported first.
+        expect(() => new MarketUser({ ...fields, long: short, short: long })).toThrow(/'long'/);
+    });
+
+    it('names the first missing required field', () => {
+        const untyped = MarketUser as unknown as new (fields: object) => MarketUser;
+        const { short: _short, claimableCredit: _credit, ...rest } = fields;
+        expect(() => new untyped(rest)).toThrow(TypeError);
+        expect(() => new untyped(rest)).toThrow(
+            "new MarketUser() is missing the required field 'short'",
+        );
+        expect(() => new untyped({})).toThrow(
+            "new MarketUser() is missing the required field 'marketId'",
+        );
+        // `archived` stays optional.
+        expect(new untyped({ ...fields, archived: undefined }).archived).toEqual([]);
+    });
+
     it('rejects the positional arguments it took before 1.0.0', () => {
         const positional = MarketUser as unknown as new (...args: unknown[]) => MarketUser;
         expect(() => new positional(MARKET, USER, fields.long, fields.short, 7, 5n)).toThrow(

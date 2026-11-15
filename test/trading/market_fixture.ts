@@ -194,6 +194,7 @@ export function fixtureMarket(fixture: MarketFixture = {}): Market {
         vaultDecimalsOffset: SHARE_DECIMALS_OFFSET,
         assetDecimals: TOKEN_DECIMALS,
         treasuryRate: fixture.treasuryRate ?? 0n,
+        spreadReductionFactor: 0n,
     });
 }
 
