@@ -1,21 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { I128_MAX, SCALAR_18 } from '../../src/math/fixed.js';
-import type {
-    MarketConfig,
-    MarketData,
-    Position,
-} from '../../src/contracts/market/types.js';
+import type { MarketConfig, MarketData, Position } from '../../src/contracts/market/types.js';
 import { VaultOrderKind } from '../../src/contracts/market/types.js';
-import {
-    advanceMarketAccruals,
-    marketPendingBorrowing,
-} from '../../src/trading/internal/math.js';
+import { advanceMarketAccruals, marketPendingBorrowing } from '../../src/trading/internal/math.js';
 import type { PriceData } from '../../src/trading/internal/math.js';
 import { quotePositionAction } from '../../src/trading/internal/quote.js';
-import type {
-    PositionAction,
-    PositionActionOutcome,
-} from '../../src/trading/internal/quote.js';
+import type { PositionAction, PositionActionOutcome } from '../../src/trading/internal/quote.js';
 import {
     convertVaultAssetsToShares,
     convertVaultSharesToAssets,
@@ -23,18 +13,9 @@ import {
     quoteVaultDepositFill,
     quoteVaultRedeemFill,
 } from '../../src/trading/internal/vault.js';
-import type {
-    VaultAtomicState,
-    VaultQuoteContext,
-} from '../../src/trading/internal/vault.js';
+import type { VaultAtomicState, VaultQuoteContext } from '../../src/trading/internal/vault.js';
 import { VaultOrderIntent } from '../../src/trading/vault_order.js';
-import {
-    USER,
-    contractTestConfig,
-    fixtureMarket,
-    marketData,
-    pair,
-} from './market_fixture.js';
+import { USER, contractTestConfig, fixtureMarket, marketData, pair } from './market_fixture.js';
 
 // Ports of the contract tests for the borrowing NAV change in
 // zenex-contracts v1.0.0: pending
@@ -55,8 +36,7 @@ const SHARES_1000 = 1000_0000000n * SHARE_SCALE;
  * checkpointed at index 0.001 and 333.3333333 at 0.001500000000000333.
  */
 const TWO_LONGS_WEIGHT =
-    1000_0000000n * 1_000_000_000_000_000n +
-    333_3333333n * 1_500_000_000_000_333n;
+    1000_0000000n * 1_000_000_000_000_000n + 333_3333333n * 1_500_000_000_000_333n;
 
 const flat = (value: bigint, publishTime = 0n): PriceData => ({
     bid: value,
@@ -73,10 +53,7 @@ describe('marketPendingBorrowing mirrors MarketData::pending_borrowing', () => {
         const data = marketData({
             notional: pair(1333_3333333n, 5_0000000n),
             borrowingIdx: pair(2_718_281_828_459_045n, 30_000_010_000_000_000n),
-            borrowingWeight: pair(
-                TWO_LONGS_WEIGHT,
-                5_0000000n * (SCALAR_18 / 100n),
-            ),
+            borrowingWeight: pair(TWO_LONGS_WEIGHT, 5_0000000n * (SCALAR_18 / 100n)),
         });
 
         expect(marketPendingBorrowing(data, true)).toBe(2_2243758n);
@@ -117,9 +94,7 @@ describe('marketPendingBorrowing mirrors MarketData::pending_borrowing', () => {
             notional: pair(MAX_OPEN_INTEREST, 0n),
             borrowingIdx: pair(171n * SCALAR_18, 0n),
         });
-        expect(() => marketPendingBorrowing(past, true)).toThrow(
-            /outside the i128 range/,
-        );
+        expect(() => marketPendingBorrowing(past, true)).toThrow(/outside the i128 range/);
     });
 
     // A side whose weight runs ahead of its mark counts as zero, not as a
@@ -157,12 +132,10 @@ describe('lpNetPnl mirrors Market::lp_net_pnl', () => {
             });
             const price = flat(SCALAR_18);
 
-            expect(
-                lpNetPnl(data, config, price, 1000_0000000n, treasuryRate, true),
-            ).toBe(-redeem);
-            expect(
-                lpNetPnl(data, config, price, 1000_0000000n, treasuryRate, false),
-            ).toBe(-deposit);
+            expect(lpNetPnl(data, config, price, 1000_0000000n, treasuryRate, true)).toBe(-redeem);
+            expect(lpNetPnl(data, config, price, 1000_0000000n, treasuryRate, false)).toBe(
+                -deposit,
+            );
         },
     );
 
@@ -179,12 +152,8 @@ describe('lpNetPnl mirrors Market::lp_net_pnl', () => {
         });
         const price = flat(10n * SCALAR_18);
 
-        expect(lpNetPnl(data, config, price, 100_0000000n, 0n, true)).toBe(
-            80_0000000n,
-        );
-        expect(lpNetPnl(data, config, price, 100_0000000n, 0n, false)).toBe(
-            80_0000000n,
-        );
+        expect(lpNetPnl(data, config, price, 100_0000000n, 0n, true)).toBe(80_0000000n);
+        expect(lpNetPnl(data, config, price, 100_0000000n, 0n, false)).toBe(80_0000000n);
     });
 
     // The long side entered 150.0 for 10 base tokens on 20.0 margin, so at
@@ -200,12 +169,8 @@ describe('lpNetPnl mirrors Market::lp_net_pnl', () => {
         });
         const price = flat(10n * SCALAR_18);
 
-        expect(lpNetPnl(data, config, price, 100_0000000n, 0n, true)).toBe(
-            -30_0000000n,
-        );
-        expect(lpNetPnl(data, config, price, 100_0000000n, 0n, false)).toBe(
-            -30_0000000n,
-        );
+        expect(lpNetPnl(data, config, price, 100_0000000n, 0n, true)).toBe(-30_0000000n);
+        expect(lpNetPnl(data, config, price, 100_0000000n, 0n, false)).toBe(-30_0000000n);
     });
 });
 
@@ -270,9 +235,7 @@ describe('the borrowing weight follows the position checkpoints', () => {
         });
         market = openA.postMarket;
         let a = openA.postPosition;
-        expect(market.borrowingWeight.long).toBe(
-            1000_0000000n * 1_000_000_000_000_000n,
-        );
+        expect(market.borrowingWeight.long).toBe(1000_0000000n * 1_000_000_000_000_000n);
         expect(marketPendingBorrowing(market, false)).toBe(0n);
 
         market.borrowingIdx.long = 1_500_000_000_000_333n;
@@ -305,9 +268,7 @@ describe('the borrowing weight follows the position checkpoints', () => {
         a = reduce.postPosition;
         expect(reduce.fees.borrowing).toBe(1_7182819n);
         expect(market.notional.long).toBe(933_3333333n);
-        expect(market.borrowingWeight.long).toBe(
-            21_309_690_970_255_379_999_999_889n,
-        );
+        expect(market.borrowingWeight.long).toBe(21_309_690_970_255_379_999_999_889n);
         expect(marketPendingBorrowing(market, true)).toBe(4060939n);
         expect(marketPendingBorrowing(market, false)).toBe(4060940n);
 
@@ -401,11 +362,7 @@ describe('vault share math at the fixed offset of 6', () => {
     it('prices a profit matching the assets on the floor', () => {
         const assets = 1000_0000000n;
         expect(
-            convertVaultAssetsToShares(
-                vault(assets, assets * SHARE_SCALE),
-                10_0000000n,
-                assets,
-            ),
+            convertVaultAssetsToShares(vault(assets, assets * SHARE_SCALE), 10_0000000n, assets),
         ).toBe(100_000_000n * (10_000_000_000_000_000n + SHARE_SCALE));
     });
 
@@ -414,20 +371,16 @@ describe('vault share math at the fixed offset of 6', () => {
     // 1e10. Two units price it one unit past.
     it('quotes a full exit at and one unit past the balance', () => {
         const state = vault(1000_0000000n, 1000_0000000n * SHARE_SCALE);
-        expect(convertVaultSharesToAssets(state, state.totalSupply, -1n)).toBe(
-            1000_0000000n,
-        );
-        expect(convertVaultSharesToAssets(state, state.totalSupply, -2n)).toBe(
-            1000_0000001n,
-        );
+        expect(convertVaultSharesToAssets(state, state.totalSupply, -1n)).toBe(1000_0000000n);
+        expect(convertVaultSharesToAssets(state, state.totalSupply, -2n)).toBe(1000_0000001n);
     });
 
     // A pending loss of 10^6 - 1 units on the empty vault prices one share
     // per unit, so a deposit of the supply bound mints exactly the bound.
     it('mints the supply bound at one share per unit', () => {
-        expect(
-            convertVaultAssetsToShares(vault(0n, 0n), SUPPLY_BOUND, -(SHARE_SCALE - 1n)),
-        ).toBe(SUPPLY_BOUND);
+        expect(convertVaultAssetsToShares(vault(0n, 0n), SUPPLY_BOUND, -(SHARE_SCALE - 1n))).toBe(
+            SUPPLY_BOUND,
+        );
     });
 });
 
@@ -490,8 +443,7 @@ describe('vault fills price pending borrowing against the LP', () => {
         expect(redeem.value.kind).toBe('redeem');
         expect(redeem.value.netPnl).toBe(-5_0000000n);
         expect(redeem.value.kind === 'redeem' && redeem.value.grossAssets).toBe(
-            (5_0000000n * SHARE_SCALE * (1005_0000000n + 1n)) /
-                (SHARES_1000 + SHARE_SCALE),
+            (5_0000000n * SHARE_SCALE * (1005_0000000n + 1n)) / (SHARES_1000 + SHARE_SCALE),
         );
     });
 
@@ -559,9 +511,7 @@ describe('vault fills price pending borrowing against the LP', () => {
         expect(accrued.borrowingIdx).toEqual(pair(900_000_000_000_000_000n, 0n));
         expect(marketPendingBorrowing(stored, false)).toBe(0n);
         expect(marketPendingBorrowing(accrued, false)).toBe(90_0000000n);
-        expect(
-            lpNetPnl(accrued, config, price, vault.totalAssets, 0n, false),
-        ).toBe(-90_0000000n);
+        expect(lpNetPnl(accrued, config, price, vault.totalAssets, 0n, false)).toBe(-90_0000000n);
 
         const deposit = quoteVaultDepositFill({
             ...context({ market: stored, config, price, now: 3700n }),
@@ -711,13 +661,7 @@ describe('vault fills price pending borrowing against the LP', () => {
         });
 
         it('blocks VaultOrderIntent.fills with code 754', () => {
-            const intent = new VaultOrderIntent(
-                'C',
-                USER,
-                VaultOrderKind.Deposit,
-                5_0000000n,
-                0n,
-            );
+            const intent = new VaultOrderIntent('C', USER, VaultOrderKind.Deposit, 5_0000000n, 0n);
             const over = fixtureMarket({
                 data: gateBook(55_0000000n, 145_0000000n),
                 vaultAssets: 100_0000000n,
@@ -797,13 +741,7 @@ describe('vault fills price pending borrowing against the LP', () => {
         });
 
         it('blocks VaultOrderIntent.fills with code 803', () => {
-            const intent = new VaultOrderIntent(
-                'C',
-                USER,
-                VaultOrderKind.Redeem,
-                SHARES_1000,
-                0n,
-            );
+            const intent = new VaultOrderIntent('C', USER, VaultOrderKind.Redeem, SHARES_1000, 0n);
             // The fixture market holds 1,000.0 at the bootstrap rate, so its
             // whole supply exits for
             // floor(1e16 * (1e10 + 2 + 1) / (1e16 + 1e6)) = 1,000.0000001.
@@ -895,20 +833,15 @@ describe('Market share pricing counts pending borrowing', () => {
         const supply = SHARES_1000 + SHARE_SCALE;
 
         // floor(1e8 * 10_000_000_001_000_000 / 10_019_119_384)
-        expect(loaded.assetsToShares(10_0000000n, SCALAR_18)).toBe(
+        expect(loaded.assetsToShares(10_0000000n, SCALAR_18)).toBe(99_809_171_023_248n);
+        expect((10_0000000n * supply) / (1000_0000000n + 1_9119383n + 1n)).toBe(
             99_809_171_023_248n,
         );
-        expect(
-            (10_0000000n * supply) / (1000_0000000n + 1_9119383n + 1n),
-        ).toBe(99_809_171_023_248n);
         // 10.0 shares: floor(1e14 * 10_019_119_382 / 10_000_000_001_000_000)
-        expect(
-            loaded.sharesToAssets(10_0000000n * SHARE_SCALE, SCALAR_18),
-        ).toBe(10_0191193n);
-        expect(
-            (10_0000000n * SHARE_SCALE * (1000_0000000n + 1_9119381n + 1n)) /
-                supply,
-        ).toBe(10_0191193n);
+        expect(loaded.sharesToAssets(10_0000000n * SHARE_SCALE, SCALAR_18)).toBe(10_0191193n);
+        expect((10_0000000n * SHARE_SCALE * (1000_0000000n + 1_9119381n + 1n)) / supply).toBe(
+            10_0191193n,
+        );
     });
 
     it('prices nothing extra once every position sits at the current index', () => {
@@ -960,18 +893,14 @@ describe('Market share pricing counts pending borrowing', () => {
 
         const accrued = stored.accrue(price, 3700n);
         expect(accrued.data.borrowingWeight).toEqual(pair());
-        expect(accrued.data.borrowingIdx).toEqual(
-            pair(900_000_000_000_000_000n, 0n),
-        );
+        expect(accrued.data.borrowingIdx).toEqual(pair(900_000_000_000_000_000n, 0n));
         expect(accrued.pendingBorrowing()).toBe(90_0000000n);
         expect(accrued.netPnl(price)).toBe(-90_0000000n);
         // The backing reads 1,090.0:
         // floor(1e14 * 10_900_000_001 / 10_000_000_001_000_000) = 10.8999999
         // and floor(1e8 * 10_000_000_001_000_000 / 10_900_000_001).
         expect(accrued.sharesToAssets(shares, price)).toBe(10_8999999n);
-        expect(accrued.assetsToShares(10_0000000n, price)).toBe(
-            91_743_119_266_812n,
-        );
+        expect(accrued.assetsToShares(10_0000000n, price)).toBe(91_743_119_266_812n);
     });
 });
 
@@ -1011,13 +940,7 @@ describe('VaultOrderIntent quotes on the market accrued to the quote time', () =
             treasuryRate: SCALAR_18 / 10n,
         });
     const deposit = (minOut: bigint) =>
-        new VaultOrderIntent(
-            market().id,
-            USER,
-            VaultOrderKind.Deposit,
-            AMOUNT,
-            minOut,
-        );
+        new VaultOrderIntent(market().id, USER, VaultOrderKind.Deposit, AMOUNT, minOut);
 
     // The 100.0 deposit mints on 99.9 after the 0.1% fee.
     // At the stored accrual: 999_000_000 * (1e16 + 1e6) / (1e10 + 1).
@@ -1078,9 +1001,7 @@ describe('VaultOrderIntent quotes on the market accrued to the quote time', () =
     it('quotes what the snapshot accrued to the quote time quotes', () => {
         const loaded = market();
         const accrued = loaded.accrue(PRICE, QUOTE_AT);
-        expect(accrued.data.borrowingIdx).toEqual(
-            pair(684_931_506_854_400n, 0n),
-        );
+        expect(accrued.data.borrowingIdx).toEqual(pair(684_931_506_854_400n, 0n));
 
         const mint = deposit(0n);
         expect(mint.expectedOut(loaded, PRICE, QUOTE_AT)).toBe(ACCRUED_QUOTE);

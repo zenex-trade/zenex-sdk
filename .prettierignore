@@ -1,0 +1,4 @@
+# Generated from the contract WASMs by scripts/contract-specs.mjs.
+src/contracts/contract_specs.ts
+# Test fixtures: captured or generated data, kept byte for byte.
+test/fixtures/

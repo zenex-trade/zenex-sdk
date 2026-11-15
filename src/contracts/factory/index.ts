@@ -1,9 +1,6 @@
 export { FactoryContract } from './contract.js';
 
-export type {
-    FactoryInitMeta,
-    FactoryConstructorArgs,
-} from './contract.js';
+export type { FactoryInitMeta, FactoryConstructorArgs } from './contract.js';
 
 export { FactoryEventType } from './events.js';
 

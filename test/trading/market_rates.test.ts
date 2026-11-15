@@ -26,9 +26,7 @@ describe('Market.borrowingRate', () => {
 
         // One hour of accrual moves the long index only.
         const later = market.accrue(px(10), 3_600n);
-        expect(later.data.borrowingIdx.long).toBe(
-            market.borrowingRate(true, px(10)) * 3_600n,
-        );
+        expect(later.data.borrowingIdx.long).toBe(market.borrowingRate(true, px(10)) * 3_600n);
         expect(later.data.borrowingIdx.short).toBe(0n);
     });
 

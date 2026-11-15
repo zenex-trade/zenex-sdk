@@ -18,14 +18,7 @@ import {
     ledgerEntryFor,
     TEST_FEED_ID,
 } from '../helpers/market_state.js';
-import {
-    USER,
-    fixtureMarket,
-    flatPosition,
-    linkedEntries,
-    px,
-    unit,
-} from './market_fixture.js';
+import { USER, fixtureMarket, flatPosition, linkedEntries, px, unit } from './market_fixture.js';
 import { OrderIntent, previewOrder } from '../../src/trading/order.js';
 import { MarketPosition } from '../../src/trading/position.js';
 
@@ -81,9 +74,7 @@ function marketEntries(
         ),
     ];
     if (!overrides.omitData) {
-        entries.push(
-            ledgerEntryFor(marketDataLedgerKey(where.market), marketDataScVal()),
-        );
+        entries.push(ledgerEntryFor(marketDataLedgerKey(where.market), marketDataScVal()));
     }
     if (!overrides.omitBalance) {
         entries.push(
@@ -215,9 +206,7 @@ describe('Market.load', () => {
         const spy = mockEntries(marketEntries(contracts));
         await Market.load(network, contracts);
         const sent = spy.mock.calls[0].map((k) => (k as xdr.LedgerKey).toXDR('base64'));
-        expect(sent).toContain(
-            tokenBalanceLedgerKey(TOKEN, VAULT).toXDR('base64'),
-        );
+        expect(sent).toContain(tokenBalanceLedgerKey(TOKEN, VAULT).toXDR('base64'));
     });
 
     it('fails closed on a required entry the RPC omitted', async () => {
@@ -407,10 +396,26 @@ describe('Market constructor (one fields object)', () => {
         const market = new Market(fields);
         expect('network' in market).toBe(false);
         expect(Object.keys(market).sort()).toEqual([
-            'adl', 'assetDecimals', 'config', 'data', 'delistedAt', 'feedId', 'id',
-            'ledger', 'oracle', 'owner', 'spreadReductionFactor', 'status',
-            'terminalPrice', 'token', 'treasury', 'treasuryRate', 'vault',
-            'vaultAssets', 'vaultDecimalsOffset', 'vaultShares',
+            'adl',
+            'assetDecimals',
+            'config',
+            'data',
+            'delistedAt',
+            'feedId',
+            'id',
+            'ledger',
+            'oracle',
+            'owner',
+            'spreadReductionFactor',
+            'status',
+            'terminalPrice',
+            'token',
+            'treasury',
+            'treasuryRate',
+            'vault',
+            'vaultAssets',
+            'vaultDecimalsOffset',
+            'vaultShares',
         ]);
     });
 
@@ -453,10 +458,18 @@ describe('Market constructor (one fields object)', () => {
             data: MarketData;
             adl: { long: boolean };
         };
-        expect(() => { writable.config.maxUtilOpen /= 2n; }).toThrow(TypeError);
-        expect(() => { writable.data.creditPool = 1n; }).toThrow(TypeError);
-        expect(() => { writable.data.notional.long = 1n; }).toThrow(TypeError);
-        expect(() => { writable.adl.long = true; }).toThrow(TypeError);
+        expect(() => {
+            writable.config.maxUtilOpen /= 2n;
+        }).toThrow(TypeError);
+        expect(() => {
+            writable.data.creditPool = 1n;
+        }).toThrow(TypeError);
+        expect(() => {
+            writable.data.notional.long = 1n;
+        }).toThrow(TypeError);
+        expect(() => {
+            writable.adl.long = true;
+        }).toThrow(TypeError);
         rated.feedId[0] ^= 0xff;
         expect(market.feedId[0]).toBe(rated.feedId[0] ^ 0xff);
         expect(market.openCapacity(true, px(100))).toBe(capacity);
@@ -490,13 +503,7 @@ describe('the treasury rate in previews', () => {
                 notional,
                 margin: notional / 5n,
             });
-            return previewOrder(
-                market.withTreasuryRate(rate),
-                flatPosition(),
-                order,
-                px(1),
-                1n,
-            );
+            return previewOrder(market.withTreasuryRate(rate), flatPosition(), order, px(1), 1n);
         };
         let low = unit(100);
         let high = unit(600);
@@ -530,8 +537,16 @@ describe('MarketPosition constructor (one fields object)', () => {
         expect({ ...position }).toEqual(fields);
         expect(position.isOpen()).toBe(true);
         expect(Object.keys(position).sort()).toEqual([
-            'borrowingIdx', 'decreaseOrders', 'fundingIdx', 'isLong', 'lockedNotional',
-            'margin', 'notional', 'pricedAt', 'tokens', 'unlocksAt',
+            'borrowingIdx',
+            'decreaseOrders',
+            'fundingIdx',
+            'isLong',
+            'lockedNotional',
+            'margin',
+            'notional',
+            'pricedAt',
+            'tokens',
+            'unlocksAt',
         ]);
     });
 
@@ -555,7 +570,9 @@ describe('MarketPosition constructor (one fields object)', () => {
 
     it('takes a readonly list of order ids', () => {
         const frozen: readonly number[] = Object.freeze([1]);
-        expect(new MarketPosition({ ...fields, decreaseOrders: frozen }).decreaseOrders).toEqual([1]);
+        expect(new MarketPosition({ ...fields, decreaseOrders: frozen }).decreaseOrders).toEqual([
+            1,
+        ]);
     });
 
     it('has readonly fields', () => {
@@ -566,9 +583,7 @@ describe('MarketPosition constructor (one fields object)', () => {
 
     it('rejects the positional arguments it took before 1.0.0', () => {
         const positional = MarketPosition as unknown as new (...args: unknown[]) => MarketPosition;
-        expect(
-            () => new positional(true, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []),
-        ).toThrow(TypeError);
+        expect(() => new positional(true, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, [])).toThrow(TypeError);
         expect(() => new positional()).toThrow(/takes one fields object/);
         // @ts-expect-error the fields object is the only argument.
         expect(() => new MarketPosition(true, 0n)).toThrow(TypeError);

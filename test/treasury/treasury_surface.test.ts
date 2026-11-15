@@ -21,12 +21,18 @@ describe('TreasuryContract surface', () => {
 
     it('deploy builds the constructor op', () => {
         const op = TreasuryContract.deploy(OWNER, Buffer.alloc(32, 9), { owner: OWNER, rate: 5n });
-        const create = xdr.Operation.fromXDR(op, 'base64').body()
-            .invokeHostFunctionOp().hostFunction().createContractV2();
+        const create = xdr.Operation.fromXDR(op, 'base64')
+            .body()
+            .invokeHostFunctionOp()
+            .hostFunction()
+            .createContractV2();
         expect(scValToNative(create.constructorArgs()[0])).toBe(OWNER);
         expect(scValToNative(create.constructorArgs()[1])).toBe(5n);
 
-        const opHex = TreasuryContract.deploy(OWNER, Buffer.alloc(32, 9).toString('hex'), { owner: OWNER, rate: 5n });
+        const opHex = TreasuryContract.deploy(OWNER, Buffer.alloc(32, 9).toString('hex'), {
+            owner: OWNER,
+            rate: 5n,
+        });
         expect(opHex).toBeTypeOf('string');
     });
 
@@ -41,7 +47,9 @@ describe('TreasuryContract surface', () => {
 
         expect(decodeInvoke(treasury.getOwner()).fn).toBe('get_owner');
         expect(decodeInvoke(treasury.transferOwnership(OWNER, 100)).args).toEqual([OWNER, 100]);
-        expect(decodeInvoke(treasury.transferOwnership(Address.fromString(OWNER), 100)).args).toEqual([OWNER, 100]);
+        expect(
+            decodeInvoke(treasury.transferOwnership(Address.fromString(OWNER), 100)).args,
+        ).toEqual([OWNER, 100]);
         expect(decodeInvoke(treasury.acceptOwnership()).fn).toBe('accept_ownership');
         expect(decodeInvoke(treasury.renounceOwnership()).fn).toBe('renounce_ownership');
         expect(decodeInvoke(treasury.getRate()).fn).toBe('get_rate');

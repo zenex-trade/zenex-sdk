@@ -2,9 +2,7 @@ import type { Network } from './index.js';
 import { rpc, xdr } from '@stellar/stellar-sdk';
 
 /** Codes for a failed state read. */
-export type MarketStateFailureCode =
-    | 'MISSING_STATE'
-    | 'IDENTITY_MISMATCH';
+export type MarketStateFailureCode = 'MISSING_STATE' | 'IDENTITY_MISMATCH';
 
 /** A batched contract-state read could not produce a coherent result. */
 export class MarketStateError extends Error {
@@ -85,8 +83,7 @@ export async function readEntries(
     // only once the ledger is past it. So an entry whose live-until equals
     // the batch's ledger is still live at that ledger.
     const lapsed = (entry: ReturnedEntry): boolean =>
-        entry.liveUntilLedgerSeq !== undefined &&
-        entry.liveUntilLedgerSeq < ledger;
+        entry.liveUntilLedgerSeq !== undefined && entry.liveUntilLedgerSeq < ledger;
 
     const at = (key: xdr.LedgerKey, label: string): xdr.ScVal | undefined => {
         const entry = returned.get(key.toXDR('base64'));
@@ -110,10 +107,7 @@ export async function readEntries(
         require(key, label) {
             const value = at(key, label);
             if (value === undefined) {
-                throw new MarketStateError(
-                    'MISSING_STATE',
-                    `${label} not found`,
-                );
+                throw new MarketStateError('MISSING_STATE', `${label} not found`);
             }
             return value;
         },

@@ -52,8 +52,7 @@ describe('package root type exports', () => {
         const readFile = host.readFile.bind(host);
         const fileExists = host.fileExists.bind(host);
         host.fileExists = (path) => path === consumerPath || fileExists(path);
-        host.readFile = (path) =>
-            path === consumerPath ? source : readFile(path);
+        host.readFile = (path) => (path === consumerPath ? source : readFile(path));
         host.getSourceFile = (path, languageVersion) => {
             const contents = host.readFile(path);
             return contents === undefined
@@ -64,9 +63,7 @@ describe('package root type exports', () => {
         const program = ts.createProgram([consumerPath], options, host);
         const diagnostics = ts
             .getPreEmitDiagnostics(program)
-            .map((diagnostic) =>
-                ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
-            );
+            .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
 
         expect(diagnostics).toEqual([]);
     }, 15_000);
@@ -146,8 +143,7 @@ describe('package root type exports', () => {
         const readFile = host.readFile.bind(host);
         const fileExists = host.fileExists.bind(host);
         host.fileExists = (path) => path === consumerPath || fileExists(path);
-        host.readFile = (path) =>
-            path === consumerPath ? source : readFile(path);
+        host.readFile = (path) => (path === consumerPath ? source : readFile(path));
         host.getSourceFile = (path, languageVersion) => {
             const contents = host.readFile(path);
             return contents === undefined
@@ -158,9 +154,7 @@ describe('package root type exports', () => {
         const program = ts.createProgram([consumerPath], options, host);
         const diagnostics = ts
             .getPreEmitDiagnostics(program)
-            .map((diagnostic) =>
-                ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
-            );
+            .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
 
         expect(diagnostics).toEqual([]);
     }, 15_000);
@@ -229,8 +223,7 @@ describe('package root type exports', () => {
         const readFile = host.readFile.bind(host);
         const fileExists = host.fileExists.bind(host);
         host.fileExists = (path) => path === consumerPath || fileExists(path);
-        host.readFile = (path) =>
-            path === consumerPath ? source : readFile(path);
+        host.readFile = (path) => (path === consumerPath ? source : readFile(path));
         host.getSourceFile = (path, languageVersion) => {
             const contents = host.readFile(path);
             return contents === undefined
@@ -241,9 +234,7 @@ describe('package root type exports', () => {
         const program = ts.createProgram([consumerPath], options, host);
         const diagnostics = ts
             .getPreEmitDiagnostics(program)
-            .map((diagnostic) =>
-                ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
-            );
+            .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
 
         expect(diagnostics).toEqual([]);
     }, 15_000);

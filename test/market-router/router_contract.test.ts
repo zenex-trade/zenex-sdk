@@ -23,8 +23,15 @@ function decodeInvoke(op: string) {
 /** A `create_order`-shaped fill call for the first slot of a batch. */
 function fillCall(): Call {
     return MarketRouterContract.createOrderCall({
-        market: TRADING, user: USER, isLong: true, kind: OrderKind.MarketIncrease,
-        notional: 100n, margin: 10n, triggerPrice: 0n, priceBound: 200n, expiration: 12345,
+        market: TRADING,
+        user: USER,
+        isLong: true,
+        kind: OrderKind.MarketIncrease,
+        notional: 100n,
+        margin: 10n,
+        triggerPrice: 0n,
+        priceBound: 200n,
+        expiration: 12345,
     });
 }
 
@@ -52,7 +59,7 @@ describe('MarketRouterContract', () => {
         const { fn, args } = decodeInvoke(op);
         expect(fn).toBe('create_and_try_fill');
         expect(args).toHaveLength(4);
-        expect((args[0] as unknown[])).toHaveLength(1);
+        expect(args[0] as unknown[]).toHaveLength(1);
         expect(args[1]).toBe(USER);
         expect(args[2]).toBe(KEEPER);
         expect(Buffer.from(args[3] as Uint8Array)).toEqual(price);
@@ -60,8 +67,15 @@ describe('MarketRouterContract', () => {
 
     it('createAndFill carries a multi-call batch: fill first, trigger resting', () => {
         const trigger = MarketRouterContract.createOrderCall({
-            market: TRADING, user: USER, isLong: true, kind: OrderKind.LimitDecrease,
-            notional: 50n, margin: 0n, triggerPrice: 300n, priceBound: 0n, expiration: 12345,
+            market: TRADING,
+            user: USER,
+            isLong: true,
+            kind: OrderKind.LimitDecrease,
+            notional: 50n,
+            margin: 0n,
+            triggerPrice: 300n,
+            priceBound: 0n,
+            expiration: 12345,
         });
         const op = contract.createAndFill([fillCall(), trigger], USER, KEEPER, Buffer.from([0]));
         const { args } = decodeInvoke(op);
@@ -74,19 +88,34 @@ describe('MarketRouterContract', () => {
 
     it('createOrderCall mirrors MarketContract.createOrderCall byte-for-byte and crosses kind as u32', () => {
         const params = {
-            market: TRADING, user: USER, isLong: false, kind: OrderKind.StopDecrease,
-            notional: 77n, margin: 3n, triggerPrice: 250n, priceBound: 9n, expiration: 42,
+            market: TRADING,
+            user: USER,
+            isLong: false,
+            kind: OrderKind.StopDecrease,
+            notional: 77n,
+            margin: 3n,
+            triggerPrice: 250n,
+            priceBound: 9n,
+            expiration: 42,
         };
         const routerCall = MarketRouterContract.createOrderCall(params);
         const helperCall = createOrderCall(params);
         const direct = new MarketContract(TRADING).createOrderCall(
-            USER, false, OrderKind.StopDecrease, 77n, 3n, 250n, 9n, 42,
+            USER,
+            false,
+            OrderKind.StopDecrease,
+            77n,
+            3n,
+            250n,
+            9n,
+            42,
         );
         expect(routerCall).toEqual(helperCall);
         expect(routerCall.contract).toBe(TRADING);
         expect(routerCall.func).toBe('create_order');
-        expect(routerCall.args.map((a) => a.toXDR('base64')))
-            .toEqual(direct.args.map((a) => a.toXDR('base64')));
+        expect(routerCall.args.map((a) => a.toXDR('base64'))).toEqual(
+            direct.args.map((a) => a.toXDR('base64')),
+        );
         // kind rides as scvU32 (position 2 of the create_order tuple).
         expect(routerCall.args[2].switch().name).toBe('scvU32');
     });
@@ -116,7 +145,10 @@ describe('MarketRouterContract', () => {
             Address.fromString(USER).toScVal(),
             nestedArg,
         ]);
-        const op = contract.multicall([inner, MarketRouterContract.buildCall(TRADING, 'get_status', [])]);
+        const op = contract.multicall([
+            inner,
+            MarketRouterContract.buildCall(TRADING, 'get_status', []),
+        ]);
         const { fn, args } = decodeInvoke(op);
         expect(fn).toBe('multicall');
         const decodedCalls = args[0] as Record<string, unknown>[];
@@ -141,7 +173,9 @@ describe('MarketRouterContract', () => {
 
     it('parsers.multicallTry splits a vec of raw Vals into CallOutcome[]', () => {
         const raw = xdr.ScVal.scvVec([nativeI128(5n)]).toXDR('base64');
-        expect(MarketRouterContract.parsers.multicallTry(raw)).toEqual([{ ok: true, value: 5n, error: 0 }]);
+        expect(MarketRouterContract.parsers.multicallTry(raw)).toEqual([
+            { ok: true, value: 5n, error: 0 },
+        ]);
     });
 
     it('parsers.createAndFill passes the Vec<Val> through raw: results[0] = order id, last = payout', () => {
@@ -149,8 +183,8 @@ describe('MarketRouterContract', () => {
         const raw = xdr.ScVal.scvVec([xdr.ScVal.scvU32(3), nativeI128(10n)]).toXDR('base64');
         const results = MarketRouterContract.parsers.createAndFill(raw);
         expect(results).toEqual([3, 10n]);
-        expect(results[0]).toBe(3);                       // order id
-        expect(results[results.length - 1]).toBe(10n);    // fill payout
+        expect(results[0]).toBe(3); // order id
+        expect(results[results.length - 1]).toBe(10n); // fill payout
     });
 
     it('parsers.createAndTryFill splits into CallOutcome[]: last outcome filled vs rested', () => {
@@ -165,14 +199,16 @@ describe('MarketRouterContract', () => {
         const err = xdr.ScVal.scvError(xdr.ScError.sceContract(731));
         const rested = xdr.ScVal.scvVec([xdr.ScVal.scvU32(3), err]).toXDR('base64');
         const outcomes = MarketRouterContract.parsers.createAndTryFill(rested);
-        expect(outcomes[0]).toEqual({ ok: true, value: 3, error: 0 });   // order id created
+        expect(outcomes[0]).toEqual({ ok: true, value: 3, error: 0 }); // order id created
         expect(outcomes[outcomes.length - 1]).toEqual({ ok: false, value: undefined, error: 731 });
     });
 });
 
 function nativeI128(v: bigint): xdr.ScVal {
-    return xdr.ScVal.scvI128(new xdr.Int128Parts({
-        hi: xdr.Int64.fromString('0'),
-        lo: xdr.Uint64.fromString(v.toString()),
-    }));
+    return xdr.ScVal.scvI128(
+        new xdr.Int128Parts({
+            hi: xdr.Int64.fromString('0'),
+            lo: xdr.Uint64.fromString(v.toString()),
+        }),
+    );
 }

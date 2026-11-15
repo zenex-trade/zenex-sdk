@@ -31,8 +31,7 @@ export const NETWORK = { rpc: 'http://localhost', passphrase: 'test' };
 
 export const TOKEN_DECIMALS = 7;
 /** A token-dec amount; base size is token-dec too at an 18-dec price. */
-export const unit = (whole: number) =>
-    BigInt(whole) * 10n ** BigInt(TOKEN_DECIMALS);
+export const unit = (whole: number) => BigInt(whole) * 10n ** BigInt(TOKEN_DECIMALS);
 /** An 18-dec price from a decimal number of whole units. */
 export const px = (whole: number) =>
     (BigInt(Math.round(whole * 1_000_000)) * SCALAR_18) / 1_000_000n;
@@ -95,9 +94,7 @@ export function linkedEntries(
  * The contract's own `test_config`: 0.5% / 0.3% fees, 10% initial and 5%
  * maintenance margin, 1% liquidation fee, a 100,000.0 impact scalar.
  */
-export function contractTestConfig(
-    overrides: Partial<MarketConfig> = {},
-): MarketConfig {
+export function contractTestConfig(overrides: Partial<MarketConfig> = {}): MarketConfig {
     return {
         keeperRate: SCALAR_18 / 10n,
         minPositionNotional: 10_000_000n,

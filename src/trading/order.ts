@@ -11,10 +11,7 @@ import { estimatePosition } from './position_est.js';
 import { Price, marketPrice, quoteTime, resolvePrice } from './price.js';
 import type { PriceInput } from './price.js';
 import type { MarketContext } from './internal/apply.js';
-import {
-    applyOrder,
-    orderPriceBound as enginePriceBound,
-} from './internal/apply.js';
+import { applyOrder, orderPriceBound as enginePriceBound } from './internal/apply.js';
 import { entryTokens, quoteTradeFees } from './internal/math.js';
 import {
     closePositionParams,
@@ -32,12 +29,7 @@ import {
     isTriggerOrderKind,
 } from './internal/order.js';
 
-export {
-    isDecreaseOrderKind,
-    isIncreaseOrderKind,
-    isMarketOrderKind,
-    isTriggerOrderKind,
-};
+export { isDecreaseOrderKind, isIncreaseOrderKind, isMarketOrderKind, isTriggerOrderKind };
 
 /**
  * Default lifetime of a market order, in ledgers: about five minutes. A
@@ -99,9 +91,12 @@ export class OrderIntent {
         public triggerTtlLedgers?: number,
     ) {}
 
-    private base(
-        ttlLedgers: number = this.ttlLedgers,
-    ): { market: string; user: string; isLong: boolean; expiration: number } {
+    private base(ttlLedgers: number = this.ttlLedgers): {
+        market: string;
+        user: string;
+        isLong: boolean;
+        expiration: number;
+    } {
         return {
             market: this.market.id,
             user: this.user,
@@ -173,10 +168,7 @@ export class OrderIntent {
             notional: args.notional,
             margin: args.margin,
             triggerPrice: args.triggerPrice,
-            priceBound: this.bound(
-                OrderKind.LimitIncrease,
-                Price.from(args.triggerPrice),
-            ),
+            priceBound: this.bound(OrderKind.LimitIncrease, Price.from(args.triggerPrice)),
         });
     }
 
@@ -200,10 +192,7 @@ export class OrderIntent {
             notional: args.notional,
             margin: args.margin,
             triggerPrice: args.triggerPrice,
-            priceBound: this.bound(
-                OrderKind.StopIncrease,
-                Price.from(args.triggerPrice),
-            ),
+            priceBound: this.bound(OrderKind.StopIncrease, Price.from(args.triggerPrice)),
         });
     }
 
@@ -375,8 +364,7 @@ export function marketContext(
     user = '',
 ): MarketContext {
     const ledgerTime = quoteTime(market, now);
-    const stamp =
-        position.pricedAt > ledgerTime ? position.pricedAt : ledgerTime;
+    const stamp = position.pricedAt > ledgerTime ? position.pricedAt : ledgerTime;
     return {
         subject: { user, isLong: position.isLong },
         ledger: market.ledger,
@@ -416,8 +404,7 @@ export function previewOrder(
     const decimals = market.assetDecimals;
     const execFee = formatToken(market.config.execFee, decimals);
     const escrowedAtomic =
-        (isIncreaseOrderKind(order.kind) ? order.margin : 0n) +
-        market.config.execFee;
+        (isIncreaseOrderKind(order.kind) ? order.margin : 0n) + market.config.execFee;
     const escrowed = formatToken(escrowedAtomic, decimals);
 
     const empty = {
@@ -467,21 +454,13 @@ export function previewOrder(
         baseFee: formatToken(fees.base, decimals),
         impactFee: formatToken(fees.impact, decimals),
         execFee,
-        totalFees: formatToken(
-            fees.base + fees.impact + market.config.execFee,
-            decimals,
-        ),
+        totalFees: formatToken(fees.base + fees.impact + market.config.execFee, decimals),
         funding: formatToken(fees.funding, decimals),
         borrowing: formatToken(fees.borrowing, decimals),
         escrowed,
         executionPrice: formatPrice(outcome.executionPrice),
         payout: formatToken(outcome.walletPayout, decimals),
-        position: estimatePosition(
-            market.withData(outcome.postMarket),
-            post,
-            price,
-            at,
-        ),
+        position: estimatePosition(market.withData(outcome.postMarket), post, price, at),
     };
 }
 
@@ -584,13 +563,7 @@ export function maxMarginForBalance(
     };
     const tradeFees = (notional: bigint): bigint => {
         const tokens = entryTokens(notional, entry, isLong);
-        const fees = quoteTradeFees(
-            market.data,
-            market.config,
-            isLong,
-            notional,
-            tokens,
-        );
+        const fees = quoteTradeFees(market.data, market.config, isLong, notional, tokens);
         return fees.base + fees.impact;
     };
 

@@ -60,7 +60,11 @@ const posOf = (p: Json) => ({
     pricedAt: big(p.pricedAt),
     decreaseOrders: [] as number[],
 });
-const priceOf = (p: Json) => ({ bid: big(p.bid), ask: big(p.ask), publishTime: big(p.publishTime) });
+const priceOf = (p: Json) => ({
+    bid: big(p.bid),
+    ask: big(p.ask),
+    publishTime: big(p.publishTime),
+});
 const flat = (d: ReturnType<typeof dataOf>) =>
     JSON.stringify(d, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
 
@@ -102,10 +106,16 @@ describe('differential: SDK engine vs contract engine vectors', () => {
                 if (out.err === '740') return bump('liq:skip740');
                 const state = liquidationState(position, base);
                 if (out.err === '720') {
-                    if (state.kind !== 'unavailable' || state.contractCode !== 720) note(`rust 720, sdk ${JSON.stringify(state, (_, v) => typeof v === 'bigint' ? v.toString() : v)}`);
+                    if (state.kind !== 'unavailable' || state.contractCode !== 720)
+                        note(
+                            `rust 720, sdk ${JSON.stringify(state, (_, v) => (typeof v === 'bigint' ? v.toString() : v))}`,
+                        );
                     return bump('liq:720');
                 }
-                if (state.kind !== 'exact') return note(`sdk not exact: ${(state as any).reason}; rust ${JSON.stringify(out)}`);
+                if (state.kind !== 'exact')
+                    return note(
+                        `sdk not exact: ${(state as any).reason}; rust ${JSON.stringify(out)}`,
+                    );
                 if (out.err === '722') {
                     if (state.value.liquidatable) note('rust NotLiquidatable, sdk liquidatable');
                     return bump('liq:722');
@@ -113,7 +123,8 @@ describe('differential: SDK engine vs contract engine vectors', () => {
                 if (out.err) return note(`unexpected rust err ${out.err}`);
                 if (!state.value.liquidatable) note('rust liquidated, sdk not liquidatable');
                 const equity = big(out.returned) + big(out.liqFee);
-                if (state.value.equity !== equity) note(`equity rust ${equity} sdk ${state.value.equity}`);
+                if (state.value.equity !== equity)
+                    note(`equity rust ${equity} sdk ${state.value.equity}`);
                 return bump('liq:ok');
             }
             const notional = big(c.action.notional);
@@ -121,19 +132,28 @@ describe('differential: SDK engine vs contract engine vectors', () => {
             if (notional === 0n && margin === 0n) return bump(`${c.action.kind}:skip-noop`);
             const quote = quotePositionAction({
                 ...base,
-                action: { kind: c.action.kind === 'inc' ? 'increase' : 'decrease', notional, margin },
+                action: {
+                    kind: c.action.kind === 'inc' ? 'increase' : 'decrease',
+                    notional,
+                    margin,
+                },
                 executionFee: config.execFee,
                 relayFee: 0n,
             });
             if (out.err) {
                 bump(`${c.action.kind}:err${out.err}`);
                 if (quote.kind !== 'unavailable' || String(quote.contractCode) !== out.err) {
-                    note(`contract err ${out.err}, sdk ${quote.kind === 'unavailable' ? `${quote.code}/${quote.contractCode}/${quote.reason}` : 'fills'}`);
+                    note(
+                        `contract err ${out.err}, sdk ${quote.kind === 'unavailable' ? `${quote.code}/${quote.contractCode}/${quote.reason}` : 'fills'}`,
+                    );
                 }
                 return;
             }
             bump(`${c.action.kind}:ok`);
-            if (quote.kind !== 'exact') return note(`rust fills, sdk ${(quote as any).code}/${(quote as any).contractCode}/${(quote as any).reason}`);
+            if (quote.kind !== 'exact')
+                return note(
+                    `rust fills, sdk ${(quote as any).code}/${(quote as any).contractCode}/${(quote as any).reason}`,
+                );
             const v = quote.value;
             const cmp = (name: string, sdk: bigint, rust: string) => {
                 if (sdk !== big(rust)) note(`${name}: rust ${rust} sdk ${sdk}`);
@@ -149,9 +169,19 @@ describe('differential: SDK engine vs contract engine vectors', () => {
             const closed = rp.notional === 0n && rp.margin === 0n && rp.tokens === 0n;
             const sp = v.postPosition;
             if (closed) {
-                if (sp.notional !== 0n || sp.margin !== 0n || sp.tokens !== 0n) note('rust closed, sdk position not flat');
+                if (sp.notional !== 0n || sp.margin !== 0n || sp.tokens !== 0n)
+                    note('rust closed, sdk position not flat');
             } else {
-                for (const k of ['margin', 'notional', 'tokens', 'fundingIdx', 'borrowingIdx', 'lockedNotional', 'unlocksAt', 'pricedAt'] as const) {
+                for (const k of [
+                    'margin',
+                    'notional',
+                    'tokens',
+                    'fundingIdx',
+                    'borrowingIdx',
+                    'lockedNotional',
+                    'unlocksAt',
+                    'pricedAt',
+                ] as const) {
                     if (sp[k] !== rp[k]) note(`post.${k}: rust ${rp[k]} sdk ${sp[k]}`);
                 }
             }
@@ -161,7 +191,14 @@ describe('differential: SDK engine vs contract engine vectors', () => {
         });
         expect(diffs).toEqual([]);
         // The sample exercises every branch, not only the happy path.
-        for (const outcome of ['inc:ok', 'dec:ok', 'liq:ok', 'liq:722', 'inc:err713', 'dec:err723']) {
+        for (const outcome of [
+            'inc:ok',
+            'dec:ok',
+            'liq:ok',
+            'liq:722',
+            'inc:err713',
+            'dec:err723',
+        ]) {
             expect(stats[outcome], outcome).toBeGreaterThan(0);
         }
     });
@@ -178,9 +215,18 @@ describe('differential: SDK engine vs contract engine vectors', () => {
             const price = priceOf(c.price);
             const vb = big(c.vaultBalance);
             const tr = big(c.treasuryRate);
-            const accrued = advanceMarketAccruals(dataOf(c.data), config, price, vb, big(c.now)).market;
+            const accrued = advanceMarketAccruals(
+                dataOf(c.data),
+                config,
+                price,
+                vb,
+                big(c.now),
+            ).market;
             const note = (what: string) => diffs.push(`#${index} ${what}`);
-            if (flat(accrued) !== flat(dataOf(core.data))) note(`accrued data differs\n   rust ${flat(dataOf(core.data))}\n   sdk  ${flat(accrued)}`);
+            if (flat(accrued) !== flat(dataOf(core.data)))
+                note(
+                    `accrued data differs\n   rust ${flat(dataOf(core.data))}\n   sdk  ${flat(accrued)}`,
+                );
             const cmp = (name: string, sdk: bigint, rust: string) => {
                 if (sdk !== big(rust)) note(`${name}: rust ${rust} sdk ${sdk}`);
             };
@@ -192,7 +238,13 @@ describe('differential: SDK engine vs contract engine vectors', () => {
             cmp('sideLongMin', marketSidePnl(accrued, price, true, false), core.sideLongMin);
             cmp('sideShortMax', marketSidePnl(accrued, price, false, true), core.sideShortMax);
             cmp('sideShortMin', marketSidePnl(accrued, price, false, false), core.sideShortMin);
-            const fees = quoteTradeFees(accrued, config, c.isLong, big(core.fee.notional), big(core.fee.tokens));
+            const fees = quoteTradeFees(
+                accrued,
+                config,
+                c.isLong,
+                big(core.fee.notional),
+                big(core.fee.tokens),
+            );
             cmp('fee.base', fees.base, core.fee.base);
             cmp('fee.impact', fees.impact, core.fee.impact);
         });
@@ -214,7 +266,11 @@ describe('differential: SDK engine vs contract engine vectors', () => {
                 market: dataOf(c.data),
                 config,
                 price: { ...priceOf(c.price), publishTime: now },
-                vault: { totalAssets: big(c.vaultBalance), totalSupply: big(c.supply), decimalsOffset: 6 },
+                vault: {
+                    totalAssets: big(c.vaultBalance),
+                    totalSupply: big(c.supply),
+                    decimalsOffset: 6,
+                },
                 treasuryRate: big(c.treasuryRate),
                 executionFee: config.execFee,
             };
@@ -225,33 +281,65 @@ describe('differential: SDK engine vs contract engine vectors', () => {
                 const minOut = big(spec.minOut);
                 const quote =
                     side === 'deposit'
-                        ? quoteVaultDepositFill({ ...context, minOut, assets: amount, createdAt: now - 1n })
-                        : quoteVaultRedeemFill({ ...context, minOut, shares: amount, createdAt: now - config.redeemLock - 1n });
-                const note = (what: string) => diffs.push(`#${index} ${side} amount=${amount} minOut=${minOut} ${what}`);
+                        ? quoteVaultDepositFill({
+                              ...context,
+                              minOut,
+                              assets: amount,
+                              createdAt: now - 1n,
+                          })
+                        : quoteVaultRedeemFill({
+                              ...context,
+                              minOut,
+                              shares: amount,
+                              createdAt: now - config.redeemLock - 1n,
+                          });
+                const note = (what: string) =>
+                    diffs.push(`#${index} ${side} amount=${amount} minOut=${minOut} ${what}`);
                 // Known cosmetic: a zero-share redeem (uncreatable on chain, create rejects amount 0) reads 732 in the SDK.
-                if (side === 'redeem' && amount === 0n) { bump('redeem:skip-zero'); continue; }
+                if (side === 'redeem' && amount === 0n) {
+                    bump('redeem:skip-zero');
+                    continue;
+                }
                 if (out.err) {
                     bump(`${side}:err${out.err}`);
                     // The contract's i256 -> i128 `unwrap` trap (a host trap with no contract code) is the SDK's overflow sentinel.
-                    if (out.err.startsWith('-1') && quote.kind === 'unavailable' && quote.code === 'CONTRACT_OVERFLOW') continue;
+                    if (
+                        out.err.startsWith('-1') &&
+                        quote.kind === 'unavailable' &&
+                        quote.code === 'CONTRACT_OVERFLOW'
+                    )
+                        continue;
                     // Known cosmetic: a zero-share redeem (uncreatable on chain) reads 732 in the SDK, 800 in the vault.
-                    if (side === 'redeem' && amount === 0n && quote.kind === 'unavailable' && quote.contractCode === 732) return bump('redeem:zero-732-vs-800');
+                    if (
+                        side === 'redeem' &&
+                        amount === 0n &&
+                        quote.kind === 'unavailable' &&
+                        quote.contractCode === 732
+                    )
+                        return bump('redeem:zero-732-vs-800');
                     if (quote.kind !== 'unavailable' || String(quote.contractCode) !== out.err) {
-                        note(`contract err ${out.err}, sdk ${quote.kind === 'unavailable' ? `${quote.code}/${quote.contractCode}/${quote.reason}` : JSON.stringify(quote.value, (_, v) => typeof v === 'bigint' ? v.toString() : v)}`);
+                        note(
+                            `contract err ${out.err}, sdk ${quote.kind === 'unavailable' ? `${quote.code}/${quote.contractCode}/${quote.reason}` : JSON.stringify(quote.value, (_, v) => (typeof v === 'bigint' ? v.toString() : v))}`,
+                        );
                     }
                     continue;
                 }
                 if (quote.kind !== 'exact') {
-                    note(`rust ${JSON.stringify(out)}, sdk ${(quote as any).code}/${(quote as any).contractCode}/${(quote as any).reason}`);
+                    note(
+                        `rust ${JSON.stringify(out)}, sdk ${(quote as any).code}/${(quote as any).contractCode}/${(quote as any).reason}`,
+                    );
                     continue;
                 }
                 const v = quote.value;
                 if (out.rejected !== undefined) {
                     bump(`${side}:rejected`);
-                    if (v.kind !== 'rejected') note(`rust rejected quoted=${out.rejected}, sdk fills output=${v.output}`);
+                    if (v.kind !== 'rejected')
+                        note(`rust rejected quoted=${out.rejected}, sdk fills output=${v.output}`);
                     else {
-                        if (v.quoted !== big(out.rejected)) note(`rejected quoted: rust ${out.rejected} sdk ${v.quoted}`);
-                        if (v.netPnl !== big(out.netPnl)) note(`rejected netPnl: rust ${out.netPnl} sdk ${v.netPnl}`);
+                        if (v.quoted !== big(out.rejected))
+                            note(`rejected quoted: rust ${out.rejected} sdk ${v.quoted}`);
+                        if (v.netPnl !== big(out.netPnl))
+                            note(`rejected netPnl: rust ${out.netPnl} sdk ${v.netPnl}`);
                     }
                     continue;
                 }

@@ -1,6 +1,23 @@
 import type { MarketData, Position, SidePair, MarketConfig } from '../../contracts/market/types.js';
-import { SCALAR_18, addI128, checkedI128, mulDivCeil, mulDivFloor, subI128 } from '../../math/fixed.js';
-import { advanceMarketAccruals, entryPrice, entryTokens, exactPositionPnl, exitPrice, marketSidePnl, quoteTradeFees, sideCapacity, sideReserved } from './math.js';
+import {
+    SCALAR_18,
+    addI128,
+    checkedI128,
+    mulDivCeil,
+    mulDivFloor,
+    subI128,
+} from '../../math/fixed.js';
+import {
+    advanceMarketAccruals,
+    entryPrice,
+    entryTokens,
+    exactPositionPnl,
+    exitPrice,
+    marketSidePnl,
+    quoteTradeFees,
+    sideCapacity,
+    sideReserved,
+} from './math.js';
 import type { PriceData } from './math.js';
 import { quotePositionFees } from './position.js';
 import type { PositionFeeBreakdown } from './position.js';
@@ -16,10 +33,7 @@ const U32_MAX = 4_294_967_295;
  * result names which one, and `contractCode` carries its number.
  */
 export type QuoteUnavailableCode =
-    | 'MISSING_STATE'
-    | 'INVALID_INPUT'
-    | 'CONTRACT_OVERFLOW'
-    | 'CONTRACT_GATE';
+    'MISSING_STATE' | 'INVALID_INPUT' | 'CONTRACT_OVERFLOW' | 'CONTRACT_GATE';
 
 /**
  * The outcome of a quote call across the quoting API. Check `kind` before you
@@ -113,9 +127,7 @@ const GATE_REASONS: Readonly<Record<number, string>> = {
 
 class ProtocolGateError extends Error {
     constructor(readonly code: number) {
-        super(
-            `contract error #${code}: ${GATE_REASONS[code] ?? 'protocol gate failed'}`,
-        );
+        super(`contract error #${code}: ${GATE_REASONS[code] ?? 'protocol gate failed'}`);
     }
 }
 
@@ -418,8 +430,7 @@ function settleFees(
     const earnedFunding = quoted.claimableCreditDelta;
 
     if (funding > 0n) market.creditPool = addI128(market.creditPool, funding);
-    if (earnedFunding > 0n)
-        market.creditOwed = addI128(market.creditOwed, earnedFunding);
+    if (earnedFunding > 0n) market.creditOwed = addI128(market.creditOwed, earnedFunding);
     position.fundingIdx = pairValue(market.fundingIdx, isLong);
     setCheckpoint(
         position,
@@ -435,21 +446,14 @@ function settleFees(
     };
 }
 
-function feeVaultLeg(
-    fees: FeeBreakdown,
-    config: MarketConfig,
-    treasuryRate: bigint,
-): bigint {
+function feeVaultLeg(fees: FeeBreakdown, config: MarketConfig, treasuryRate: bigint): bigint {
     const tradeFee = addI128(fees.base, fees.impact);
     const keeper = mulDivFloor(tradeFee, config.keeperRate, SCALAR_18);
     const treasuryCut = addI128(
         mulDivFloor(tradeFee, treasuryRate, SCALAR_18),
         mulDivFloor(fees.borrowing, treasuryRate, SCALAR_18),
     );
-    return subI128(
-        addI128(subI128(tradeFee, keeper), fees.borrowing),
-        treasuryCut,
-    );
+    return subI128(addI128(subI128(tradeFee, keeper), fees.borrowing), treasuryCut);
 }
 
 function haircutPnl(
@@ -495,10 +499,7 @@ function settledEquity(
         isLong,
         exactPositionPnl(position, price, isLong),
     );
-    return addI128(
-        subI128(position.margin, addI128(trade.base, trade.impact)),
-        pnl,
-    );
+    return addI128(subI128(position.margin, addI128(trade.base, trade.impact)), pnl);
 }
 
 function marginState(
@@ -517,26 +518,11 @@ function marginState(
             maintenanceHeadroom: 0n,
         };
     }
-    const initialRequired = mulDivCeil(
-        position.notional,
-        config.initMargin,
-        SCALAR_18,
-    );
-    const maintenanceRequired = mulDivCeil(
-        position.notional,
-        config.maintenanceMargin,
-        SCALAR_18,
-    );
+    const initialRequired = mulDivCeil(position.notional, config.initMargin, SCALAR_18);
+    const maintenanceRequired = mulDivCeil(position.notional, config.maintenanceMargin, SCALAR_18);
     // The maintenance line is the settled (fee-inclusive) predicate the
     // contract's `is_liquidatable` applies, not a fee-free equity mark.
-    const equity = settledEquity(
-        position,
-        market,
-        config,
-        price,
-        vaultAssets,
-        isLong,
-    );
+    const equity = settledEquity(position, market, config, price, vaultAssets, isLong);
     return {
         initialRequired,
         maintenanceRequired,
@@ -553,20 +539,10 @@ function requireValidPosition(
     vaultAssets: bigint,
     isLong: boolean,
 ): void {
-    if (position.notional < config.minPositionNotional)
-        throw new ProtocolGateError(711);
-    if (position.notional > config.maxPositionNotional)
-        throw new ProtocolGateError(712);
-    const margin = marginState(
-        position,
-        market,
-        config,
-        price,
-        vaultAssets,
-        isLong,
-    );
-    if (position.margin < margin.initialRequired)
-        throw new ProtocolGateError(713);
+    if (position.notional < config.minPositionNotional) throw new ProtocolGateError(711);
+    if (position.notional > config.maxPositionNotional) throw new ProtocolGateError(712);
+    const margin = marginState(position, market, config, price, vaultAssets, isLong);
+    if (position.margin < margin.initialRequired) throw new ProtocolGateError(713);
     // Ports `require_valid`'s second settle: no action may leave a
     // liquidatable (settled equity below maintenance) position behind.
     // The contract reports it as PositionLiquidatable (#723), the same
@@ -612,8 +588,7 @@ function increaseTransition(
     addPair(market.margin, input.isLong, marginAdded);
 
     if (notional > 0n) {
-        const liveLock =
-            input.now < position.unlocksAt ? position.lockedNotional : 0n;
+        const liveLock = input.now < position.unlocksAt ? position.lockedNotional : 0n;
         position.lockedNotional = addI128(liveLock, notional);
         position.unlocksAt = addTimestamp(input.now, input.config.notionalLock);
     }
@@ -628,10 +603,7 @@ function increaseTransition(
         input.vaultAssets,
         input.isLong,
     );
-    if (
-        notional > 0n &&
-        pairValue(market.notional, input.isLong) > input.config.maxOpenInterest
-    ) {
+    if (notional > 0n && pairValue(market.notional, input.isLong) > input.config.maxOpenInterest) {
         throw new ProtocolGateError(715);
     }
 
@@ -644,11 +616,7 @@ function increaseTransition(
         walletPayout: 0n,
         badDebt: 0n,
         claimableCreditDelta: settled.claimableCreditDelta,
-        settlementVaultLeg: feeVaultLeg(
-            settled.fees,
-            input.config,
-            input.treasuryRate,
-        ),
+        settlementVaultLeg: feeVaultLeg(settled.fees, input.config, input.treasuryRate),
     };
 }
 
@@ -691,10 +659,7 @@ function settleToClose(
         fees: settled.fees,
         claimableCreditDelta: settled.claimableCreditDelta,
         pnl,
-        equity: addI128(
-            subI128(position.margin, settled.fees.marginDebit),
-            pnl,
-        ),
+        equity: addI128(subI128(position.margin, settled.fees.marginDebit), pnl),
     };
 }
 
@@ -751,8 +716,7 @@ function partialDecreaseTransition(
         subI128(0n, notional),
         subI128(0n, tokens),
     );
-    const paidFunding =
-        settled.fees.funding > 0n ? settled.fees.funding : 0n;
+    const paidFunding = settled.fees.funding > 0n ? settled.fees.funding : 0n;
     const marginDebit = addI128(
         addI128(trade.base, trade.impact),
         addI128(settled.fees.borrowing, paidFunding),
@@ -766,11 +730,7 @@ function partialDecreaseTransition(
         relay: input.relayFee,
         marginDebit,
     };
-    const rawPnl = exactPositionPnl(
-        { ...position, notional, tokens },
-        input.price,
-        input.isLong,
-    );
+    const rawPnl = exactPositionPnl({ ...position, notional, tokens }, input.price, input.isLong);
     const pnl = haircutPnl(
         market,
         input.config,
@@ -846,23 +806,17 @@ function decreaseTransition(
     // Settle once (`Position::decrease`): the liquidatable gate, the clamped
     // full close, and the partial's accruals all consume the same numbers.
     const settled = settleToClose(input, position, market);
-    const maintenance = mulDivCeil(
-        position.notional,
-        input.config.maintenanceMargin,
-        SCALAR_18,
-    );
+    const maintenance = mulDivCeil(position.notional, input.config.maintenanceMargin, SCALAR_18);
     // Liquidation is the only legal transition for an underwater position.
     if (settled.equity < maintenance) throw new ProtocolGateError(723);
 
-    const locked =
-        input.now < position.unlocksAt ? position.lockedNotional : 0n;
+    const locked = input.now < position.unlocksAt ? position.lockedNotional : 0n;
     // A request for the whole position (or more) is a full close; so is one
     // whose survivor would sit below the position minimum. That partial
     // could never validate (#711), so the fill clamps to a full close.
     if (
         requestedNotional >= position.notional ||
-        subI128(position.notional, requestedNotional) <
-            input.config.minPositionNotional
+        subI128(position.notional, requestedNotional) < input.config.minPositionNotional
     ) {
         if (locked > 0n) throw new ProtocolGateError(721);
         return closeSettledTransition(input, position, market, settled);
@@ -871,14 +825,7 @@ function decreaseTransition(
     if (requestedNotional > subI128(position.notional, locked)) {
         throw new ProtocolGateError(721);
     }
-    return partialDecreaseTransition(
-        input,
-        position,
-        market,
-        settled,
-        requestedNotional,
-        margin,
-    );
+    return partialDecreaseTransition(input, position, market, settled, requestedNotional, margin);
 }
 
 function runTransition(input: PositionActionInput): TransitionResult {
@@ -917,29 +864,11 @@ function runTransition(input: PositionActionInput): TransitionResult {
             input.action.margin,
         );
     } else if (input.action.kind === 'close') {
-        transition = decreaseTransition(
-            input,
-            position,
-            market,
-            position.notional,
-            0n,
-        );
+        transition = decreaseTransition(input, position, market, position.notional, 0n);
     } else if (input.action.direction === 'add') {
-        transition = increaseTransition(
-            input,
-            position,
-            market,
-            0n,
-            input.action.amount,
-        );
+        transition = increaseTransition(input, position, market, 0n, input.action.amount);
     } else {
-        transition = decreaseTransition(
-            input,
-            position,
-            market,
-            0n,
-            input.action.amount,
-        );
+        transition = decreaseTransition(input, position, market, 0n, input.action.amount);
     }
 
     // The vault draw settles before any payout, and may not exceed the
@@ -950,21 +879,12 @@ function runTransition(input: PositionActionInput): TransitionResult {
     ) {
         throw new ProtocolGateError(755);
     }
-    const postVaultAssets = addI128(
-        input.vaultAssets,
-        transition.settlementVaultLeg,
-    );
+    const postVaultAssets = addI128(input.vaultAssets, transition.settlementVaultLeg);
     if (input.action.kind === 'increase' && input.action.notional > 0n) {
-        const capacity = sideCapacity(
-            postVaultAssets,
-            input.config.maxUtilOpen,
-        );
+        const capacity = sideCapacity(postVaultAssets, input.config.maxUtilOpen);
         // Only the side that grows is gated. A price move can leave the
         // opposite side above its cap, and that must not block this fill.
-        if (
-            sideReserved(transition.market, input.price, input.isLong) >
-            capacity
-        ) {
+        if (sideReserved(transition.market, input.price, input.isLong) > capacity) {
             throw new ProtocolGateError(714);
         }
     }
@@ -976,10 +896,7 @@ function caughtUnavailable<T>(error: unknown): QuoteResult<T> {
     if (error instanceof ProtocolGateError) {
         return unavailable('CONTRACT_GATE', error.message, error.code);
     }
-    if (
-        error instanceof RangeError &&
-        error.message.includes(OVERFLOW_MESSAGE)
-    ) {
+    if (error instanceof RangeError && error.message.includes(OVERFLOW_MESSAGE)) {
         return unavailable('CONTRACT_OVERFLOW', error.message);
     }
     return unavailable(

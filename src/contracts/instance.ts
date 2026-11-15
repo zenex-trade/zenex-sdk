@@ -29,15 +29,9 @@ export interface InstanceStorage {
  *   contract-instance value. The accessors that require a key throw the same
  *   error when the key is absent.
  */
-export function instanceStorage(
-    instanceVal: xdr.ScVal,
-    label: string,
-): InstanceStorage {
+export function instanceStorage(instanceVal: xdr.ScVal, label: string): InstanceStorage {
     if (instanceVal.switch() !== xdr.ScValType.scvContractInstance()) {
-        throw new MarketStateError(
-            'MISSING_STATE',
-            `expected a ${label} contract-instance value`,
-        );
+        throw new MarketStateError('MISSING_STATE', `expected a ${label} contract-instance value`);
     }
 
     const entries = new Map<string, xdr.ScVal>();
@@ -55,10 +49,7 @@ export function instanceStorage(
     const require = (name: string): xdr.ScVal => {
         const value = entries.get(name);
         if (value === undefined) {
-            throw new MarketStateError(
-                'MISSING_STATE',
-                `${label} instance is missing ${name}`,
-            );
+            throw new MarketStateError('MISSING_STATE', `${label} instance is missing ${name}`);
         }
         return value;
     };

@@ -41,6 +41,4 @@ export interface TreasuryRateUpdateEvent extends BaseTreasuryEvent {
 
 /** A decoded treasury event, including its ownership events. Narrow on `eventType` for the concrete shape. */
 export type TreasuryEvent =
-    | TreasuryWithdrawEvent
-    | TreasuryRateUpdateEvent
-    | OwnableEvent<ZenexContractType.Treasury>;
+    TreasuryWithdrawEvent | TreasuryRateUpdateEvent | OwnableEvent<ZenexContractType.Treasury>;

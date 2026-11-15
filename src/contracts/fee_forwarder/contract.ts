@@ -95,9 +95,7 @@ export class FeeForwarderContract extends Contract {
         forwardMulticall: MarketRouterContract.parsers.multicall,
         forwardCreateAndFill: MarketRouterContract.parsers.createAndFill,
         forwardCreateAndTryFill: (result: string): CallOutcome[] =>
-            (xdr.ScVal.fromXDR(result, 'base64').vec() ?? []).map(
-                parseCallOutcome,
-            ),
+            (xdr.ScVal.fromXDR(result, 'base64').vec() ?? []).map(parseCallOutcome),
     };
 
     /**

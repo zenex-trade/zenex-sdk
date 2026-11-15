@@ -4,10 +4,7 @@ import { validateOrder } from '../../src/trading/internal/order.js';
 import { I128_MAX } from '../../src/math/fixed.js';
 import { ZenexErrorCode } from '../../src/errors.js';
 import { OrderKind, Status } from '../../src/contracts/market/types.js';
-import type {
-    Position,
-    MarketConfig,
-} from '../../src/contracts/market/types.js';
+import type { Position, MarketConfig } from '../../src/contracts/market/types.js';
 import type { OrderParams } from '../../src/contracts/router/types.js';
 
 const TRADING = StrKey.encodeContract(Buffer.alloc(32, 1));
@@ -83,10 +80,7 @@ function context(overrides: Record<string, unknown> = {}) {
     };
 }
 
-function issueCodes(
-    params: OrderParams,
-    overrides: Record<string, unknown> = {},
-) {
+function issueCodes(params: OrderParams, overrides: Record<string, unknown> = {}) {
     return validateOrder(params, context(overrides)).map((issue) => issue.code);
 }
 
@@ -94,14 +88,10 @@ describe('validateOrder', () => {
     it('mirrors negative, dust, no-op, trigger, maximum, and expiry gates', () => {
         expect(issueCodes(order({ notional: -1n }))).toContain(710);
         expect(issueCodes(order({ notional: 1n }))).toContain(732);
-        expect(issueCodes(order({ notional: 0n, margin: 0n }))).toContain(
+        expect(issueCodes(order({ notional: 0n, margin: 0n }))).toContain(732);
+        expect(issueCodes(order({ kind: OrderKind.LimitDecrease, triggerPrice: 0n }))).toContain(
             732,
         );
-        expect(
-            issueCodes(
-                order({ kind: OrderKind.LimitDecrease, triggerPrice: 0n }),
-            ),
-        ).toContain(732);
         expect(issueCodes(order({ notional: 1_000_001n }))).toContain(712);
         expect(issueCodes(order({ expiration: 999 }))).toContain(731);
     });
@@ -145,10 +135,7 @@ describe('validateOrder', () => {
     // 732, 731) and then the decrease-list push (733), stopping at the
     // first. The first issue is the code creation returns.
     it('lists issues in the order create_order checks them', () => {
-        expect(issueCodes(order({ notional: 1n }), { status: Status.Frozen })).toEqual([
-            704,
-            732,
-        ]);
+        expect(issueCodes(order({ notional: 1n }), { status: Status.Frozen })).toEqual([704, 732]);
         expect(
             issueCodes(order({ kind: 99 as OrderKind, notional: -1n }), {
                 status: Status.Retired,
@@ -182,20 +169,14 @@ describe('validateOrder', () => {
         expect(issueCodes(order({ margin: I128_MAX - 2n }))).toEqual([]);
         // A decrease escrows only the execution fee.
         expect(
-            issueCodes(
-                order({ kind: OrderKind.MarketDecrease, margin: I128_MAX, priceBound: 0n }),
-            ),
+            issueCodes(order({ kind: OrderKind.MarketDecrease, margin: I128_MAX, priceBound: 0n })),
         ).toEqual([]);
     });
 
     it('checks the exact market execution side against the bound', () => {
         const issues = validateOrder(order({ priceBound: 104n }), context());
-        expect(issues).toContainEqual(
-            expect.objectContaining({ code: 741, field: 'priceBound' }),
-        );
-        expect(validateOrder(order({ priceBound: 105n }), context())).toEqual(
-            [],
-        );
+        expect(issues).toContainEqual(expect.objectContaining({ code: 741, field: 'priceBound' }));
+        expect(validateOrder(order({ priceBound: 105n }), context())).toEqual([]);
     });
 
     it('fails closed for a malformed market price with the SDK sentinel', () => {

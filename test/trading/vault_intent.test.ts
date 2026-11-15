@@ -83,7 +83,13 @@ describe('a redeem on a retired market', () => {
     });
 
     it('builds with minOut unset and needs no price, since minOut is never read', () => {
-        const intent = VaultOrderIntent.create(retired, USER, VaultOrderKind.Redeem, shares(100), 50n);
+        const intent = VaultOrderIntent.create(
+            retired,
+            USER,
+            VaultOrderKind.Redeem,
+            shares(100),
+            50n,
+        );
         expect(intent.minOut).toBe(0n);
         expect(() =>
             VaultOrderIntent.create(market(), USER, VaultOrderKind.Redeem, shares(100), 50n),

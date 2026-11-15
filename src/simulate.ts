@@ -12,8 +12,7 @@ import type { ZenexErrorSource } from './errors.js';
 import { parseError } from './response_parser.js';
 
 // Dummy account for simulations (doesn't need to exist on chain)
-const SIMULATION_ACCOUNT =
-    'GDMVSPSKEUOTRFSJH2SXVUNB2JGORKDTWBMOP5OZJZP4GKRQUQWFJO4Y';
+const SIMULATION_ACCOUNT = 'GDMVSPSKEUOTRFSJH2SXVUNB2JGORKDTWBMOP5OZJZP4GKRQUQWFJO4Y';
 const SIMULATION_SEQUENCE = '123';
 
 /**
@@ -84,10 +83,7 @@ export async function simulateAndParse<T>(
         throw error;
     }
     if (!simulation.result?.retval) {
-        throw new ZenexError(
-            ZenexErrorCode.UnknownError,
-            'Simulation failed: no return value',
-        );
+        throw new ZenexError(ZenexErrorCode.UnknownError, 'Simulation failed: no return value');
     }
     return {
         result: parser(simulation.result.retval.toXDR('base64')),

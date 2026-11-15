@@ -7,19 +7,12 @@ import {
     orderPriceBound,
 } from '../../src/trading/internal/apply.js';
 import { quotePositionAction } from '../../src/trading/internal/quote.js';
-import type {
-    PositionAction,
-    PositionActionInput,
-} from '../../src/trading/internal/quote.js';
+import type { PositionAction, PositionActionInput } from '../../src/trading/internal/quote.js';
 import { orderExecutionPrice } from '../../src/trading/internal/order.js';
 import { ZenexErrorCode } from '../../src/errors.js';
 import type { MarketContext } from '../../src/trading/internal/apply.js';
 import type { PriceData } from '../../src/trading/internal/math.js';
-import {
-    FULL_CLOSE,
-    OrderKind,
-    Status,
-} from '../../src/contracts/market/types.js';
+import { FULL_CLOSE, OrderKind, Status } from '../../src/contracts/market/types.js';
 import type {
     MarketData,
     Position,
@@ -256,10 +249,7 @@ describe('applyOrder market fills', () => {
 
     it('maps zero-notional orders to margin adjustments in both directions', () => {
         const snap = snapshot({ position: openPosition() });
-        const added = applyOrder(
-            snap,
-            order({ notional: 0n, margin: 5_000_000n }),
-        );
+        const added = applyOrder(snap, order({ notional: 0n, margin: 5_000_000n }));
         const withdrawn = applyOrder(
             snap,
             order({
@@ -302,12 +292,8 @@ describe('applyOrder market fills', () => {
         if (atSnapshot.kind !== 'fills' || atOverride.kind !== 'fills') return;
         expect(atSnapshot.outcome.executionPrice).toBe(1_000_000_000n);
         expect(atOverride.outcome.executionPrice).toBe(2_000_000_000n);
-        expect(atSnapshot.outcome.postPosition.tokens).toBe(
-            600_000_000_000_000_000n,
-        );
-        expect(atOverride.outcome.postPosition.tokens).toBe(
-            300_000_000_000_000_000n,
-        );
+        expect(atSnapshot.outcome.postPosition.tokens).toBe(600_000_000_000_000_000n);
+        expect(atOverride.outcome.postPosition.tokens).toBe(300_000_000_000_000_000n);
     });
 });
 
@@ -367,18 +353,9 @@ describe('applyOrder gates and rests', () => {
 
     it('gates a size-growing increase while opens are halted with code 705', () => {
         const onIce = applyOrder(snapshot({ status: Status.OnIce }), order());
-        const delisted = applyOrder(
-            snapshot({ status: Status.Delisted }),
-            order(),
-        );
-        const adlHalted = applyOrder(
-            snapshot({ adl: { long: true, short: false } }),
-            order(),
-        );
-        const otherSideAdl = applyOrder(
-            snapshot({ adl: { long: false, short: true } }),
-            order(),
-        );
+        const delisted = applyOrder(snapshot({ status: Status.Delisted }), order());
+        const adlHalted = applyOrder(snapshot({ adl: { long: true, short: false } }), order());
+        const otherSideAdl = applyOrder(snapshot({ adl: { long: false, short: true } }), order());
         const marginOnly = applyOrder(
             snapshot({
                 status: Status.OnIce,
@@ -403,10 +380,7 @@ describe('applyOrder gates and rests', () => {
     });
 
     it('gates a malformed snapshot price with the SDK sentinel, not #740', () => {
-        const result = applyOrder(
-            snapshot({ price: price({ bid: 1_100_000_000n }) }),
-            order(),
-        );
+        const result = applyOrder(snapshot({ price: price({ bid: 1_100_000_000n }) }), order());
 
         // bid > ask is an SDK input error the contract never sees; #740
         // (StalePrice) must not be minted for it.
@@ -443,14 +417,8 @@ describe('applyOrder gates and rests', () => {
 
     it('rests a market order whose price bound is not crossed', () => {
         const snap = snapshot();
-        const notCrossed = applyOrder(
-            snap,
-            order({ priceBound: 900_000_000n }),
-        );
-        const crossed = applyOrder(
-            snap,
-            order({ priceBound: 1_000_000_000n }),
-        );
+        const notCrossed = applyOrder(snap, order({ priceBound: 900_000_000n }));
+        const crossed = applyOrder(snap, order({ priceBound: 1_000_000_000n }));
 
         expect(notCrossed).toEqual({
             kind: 'rests',
@@ -522,29 +490,23 @@ describe('orderPriceBound', () => {
             const bound = orderPriceBound(quoted, isLong, kind, slippageBps);
 
             expect(bound).toBe(
-                increases === isLong
-                    ? executionPrice + adverse
-                    : executionPrice - adverse,
+                increases === isLong ? executionPrice + adverse : executionPrice - adverse,
             );
             expect(bound).toBe(expected);
         },
     );
 
     it('accepts full slippage and rejects out-of-range basis points', () => {
-        const executionPrice = orderExecutionPrice(
-            OrderKind.MarketIncrease,
-            true,
-            quoted,
+        const executionPrice = orderExecutionPrice(OrderKind.MarketIncrease, true, quoted);
+        expect(orderPriceBound(quoted, true, OrderKind.MarketIncrease, 10_000n)).toBe(
+            executionPrice * 2n,
         );
-        expect(
-            orderPriceBound(quoted, true, OrderKind.MarketIncrease, 10_000n),
-        ).toBe(executionPrice * 2n);
-        expect(() =>
-            orderPriceBound(quoted, true, OrderKind.MarketIncrease, -1n),
-        ).toThrow('basis points must be between 0 and 10000');
-        expect(() =>
-            orderPriceBound(quoted, true, OrderKind.MarketIncrease, 10_001n),
-        ).toThrow('basis points must be between 0 and 10000');
+        expect(() => orderPriceBound(quoted, true, OrderKind.MarketIncrease, -1n)).toThrow(
+            'basis points must be between 0 and 10000',
+        );
+        expect(() => orderPriceBound(quoted, true, OrderKind.MarketIncrease, 10_001n)).toThrow(
+            'basis points must be between 0 and 10000',
+        );
     });
 });
 

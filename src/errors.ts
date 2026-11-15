@@ -733,9 +733,9 @@ function describeCode(
     return {
         codeName: `${tokenName}|${verifierName}`,
         message:
-            `Ambiguous contract error ${code}: "${errorMessages[code]}" if a token raised it (${tokenName}), `
-            + `"${verifierMessages[code]}" if the price verifier raised it (${verifierName}). `
-            + 'Decode with a source hint to tell them apart.',
+            `Ambiguous contract error ${code}: "${errorMessages[code]}" if a token raised it (${tokenName}), ` +
+            `"${verifierMessages[code]}" if the price verifier raised it (${verifierName}). ` +
+            'Decode with a source hint to tell them apart.',
     };
 }
 
@@ -772,16 +772,10 @@ export class ZenexError extends Error {
      */
     public readonly codeName: string;
 
-    constructor(
-        code: ZenexErrorCode,
-        message?: string,
-        source?: ZenexErrorSource,
-    ) {
+    constructor(code: ZenexErrorCode, message?: string, source?: ZenexErrorSource) {
         const shared = isShared(code);
         const resolved =
-            shared && (source === 'token' || source === 'verifier')
-                ? source
-                : undefined;
+            shared && (source === 'token' || source === 'verifier') ? source : undefined;
         const described = describeCode(code, resolved);
         super(message ?? described.message);
         this.name = 'ZenexError';
@@ -815,10 +809,7 @@ export class ZenexError extends Error {
  * @returns The error for the code, or `UnknownError` for a code no contract
  *   defines.
  */
-export function zenexErrorFromCode(
-    code: number,
-    source?: ZenexErrorSource,
-): ZenexError {
+export function zenexErrorFromCode(code: number, source?: ZenexErrorSource): ZenexError {
     if (code in ZenexErrorCode) {
         return new ZenexError(code as ZenexErrorCode, undefined, source);
     }

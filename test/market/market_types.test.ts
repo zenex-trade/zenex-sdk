@@ -1,10 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { scValToNative } from '@stellar/stellar-sdk';
 import {
-    OrderKind, VaultOrderKind, Status, FULL_CLOSE, MAX_ORDERS_PER_SIDE,
-    marketConfigToScVal, parseSidePair,
-    parseOrder, parseVaultOrder, parsePosition, parseMarketData, parseAdlState,
-    parseMarketConfig, MarketConfig,
+    OrderKind,
+    VaultOrderKind,
+    Status,
+    FULL_CLOSE,
+    MAX_ORDERS_PER_SIDE,
+    marketConfigToScVal,
+    parseSidePair,
+    parseOrder,
+    parseVaultOrder,
+    parsePosition,
+    parseMarketData,
+    parseAdlState,
+    parseMarketConfig,
+    MarketConfig,
 } from '../../src/contracts/market/types.js';
 import { MarketStateError } from '../../src/entries.js';
 
@@ -137,7 +147,11 @@ describe('trading_types', () => {
             const configScVal = marketConfigToScVal(makeDistinctConfig());
             const keys = configScVal.map()!.map((mapEntry) => mapEntry.key().sym().toString());
             for (const retiredKey of [
-                'deposit_lock', 'impact_divisor', 'instant_deposit_pnl', 'max_pnl_deposit', 'vault_fee',
+                'deposit_lock',
+                'impact_divisor',
+                'instant_deposit_pnl',
+                'max_pnl_deposit',
+                'vault_fee',
             ]) {
                 expect(keys).not.toContain(retiredKey);
             }
@@ -147,7 +161,8 @@ describe('trading_types', () => {
             const configScVal = marketConfigToScVal(makeDistinctConfig());
             for (const mapEntry of configScVal.map()!) {
                 const key = mapEntry.key().sym().toString();
-                const expectedType = key === 'notional_lock' || key === 'redeem_lock' ? 'scvU64' : 'scvI128';
+                const expectedType =
+                    key === 'notional_lock' || key === 'redeem_lock' ? 'scvU64' : 'scvI128';
                 expect(mapEntry.val().switch().name, `value type of ${key}`).toBe(expectedType);
             }
         });
@@ -179,9 +194,15 @@ describe('trading_types', () => {
 
     it('parseOrder decodes the u32 kind and carries execFee', () => {
         const order = parseOrder({
-            is_long: true, kind: 4, notional: 1000n, margin: 100n,
-            trigger_price: 250n, price_bound: 260n, exec_fee: 3n,
-            created_at: 500n, expiration: 1234,
+            is_long: true,
+            kind: 4,
+            notional: 1000n,
+            margin: 100n,
+            trigger_price: 250n,
+            price_bound: 260n,
+            exec_fee: 3n,
+            created_at: 500n,
+            expiration: 1234,
         });
         expect(order).toEqual({
             isLong: true,
@@ -199,7 +220,11 @@ describe('trading_types', () => {
 
     it('parseVaultOrder decodes minOut and execFee', () => {
         const vaultOrder = parseVaultOrder({
-            kind: 1, amount: 42n, min_out: 7n, exec_fee: 2n, created_at: 100n,
+            kind: 1,
+            amount: 42n,
+            min_out: 7n,
+            exec_fee: 2n,
+            created_at: 100n,
         });
         expect(vaultOrder).toEqual({
             kind: VaultOrderKind.Redeem,
@@ -213,9 +238,14 @@ describe('trading_types', () => {
 
     it('parsePosition decodes pricedAt and decreaseOrders', () => {
         const position = parsePosition({
-            margin: 100n, notional: 1000n, tokens: 5n,
-            funding_idx: 11n, borrowing_idx: 12n,
-            locked_notional: 13n, unlocks_at: 14n, priced_at: 15n,
+            margin: 100n,
+            notional: 1000n,
+            tokens: 5n,
+            funding_idx: 11n,
+            borrowing_idx: 12n,
+            locked_notional: 13n,
+            unlocks_at: 14n,
+            priced_at: 15n,
             decrease_orders: [3, 9],
         });
         expect(position).toEqual({
@@ -234,10 +264,14 @@ describe('trading_types', () => {
 
     it('parseMarketData decodes SidePairs and carries no lastPriceTime (moved to the PriceCache entry)', () => {
         const marketData = parseMarketData({
-            notional: { long: 1n, short: 2n }, margin: { long: 3n, short: 4n },
-            tokens: { long: 5n, short: 6n }, funding_idx: { long: 7n, short: 8n },
-            borrowing_idx: { long: 9n, short: 10n }, funding_rate: 11n,
-            accrued_at: 12n, credit_pool: 14n,
+            notional: { long: 1n, short: 2n },
+            margin: { long: 3n, short: 4n },
+            tokens: { long: 5n, short: 6n },
+            funding_idx: { long: 7n, short: 8n },
+            borrowing_idx: { long: 9n, short: 10n },
+            funding_rate: 11n,
+            accrued_at: 12n,
+            credit_pool: 14n,
             credit_owed: 15n,
             borrowing_weight: { long: 16n, short: 17n },
         });
@@ -261,10 +295,14 @@ describe('trading_types', () => {
     it('parseMarketData refuses an entry without borrowing_weight', () => {
         const parse = () =>
             parseMarketData({
-                notional: { long: 1n, short: 2n }, margin: { long: 3n, short: 4n },
-                tokens: { long: 5n, short: 6n }, funding_idx: { long: 7n, short: 8n },
-                borrowing_idx: { long: 9n, short: 10n }, funding_rate: 11n,
-                accrued_at: 12n, credit_pool: 14n,
+                notional: { long: 1n, short: 2n },
+                margin: { long: 3n, short: 4n },
+                tokens: { long: 5n, short: 6n },
+                funding_idx: { long: 7n, short: 8n },
+                borrowing_idx: { long: 9n, short: 10n },
+                funding_rate: 11n,
+                accrued_at: 12n,
+                credit_pool: 14n,
                 credit_owed: 15n,
             });
         expect(parse).toThrow(MarketStateError);

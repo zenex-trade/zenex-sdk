@@ -87,17 +87,14 @@ describe('market codes inside ZenexErrorCode (market/src/errors.rs)', () => {
         // + 720-723 (4) + 730-734 (5) + 740-742 (3) + 750-751 (2)
         // + 753-755 (3) + 760 (1) + 770-772 (3) = 35.
         const marketCodes = Object.values(ZenexErrorCode).filter(
-            (value): value is number =>
-                typeof value === 'number' && value >= 700 && value <= 772,
+            (value): value is number => typeof value === 'number' && value >= 700 && value <= 772,
         );
         expect(marketCodes).toHaveLength(35);
     });
 
     it('752 is retired: a missed min_out rejects the order instead of reverting', () => {
         expect(ZenexErrorCode[752]).toBeUndefined();
-        expect(
-            (ZenexErrorCode as unknown as Record<string, unknown>).MinOutNotMet,
-        ).toBeUndefined();
+        expect((ZenexErrorCode as unknown as Record<string, unknown>).MinOutNotMet).toBeUndefined();
         expect(zenexErrorFromCode(752).code).toBe(ZenexErrorCode.UnknownError);
         // The neighbors keep their numbers.
         expect(ZenexErrorCode[751]).toBe('VaultOrderLocked');
@@ -112,14 +109,12 @@ describe('market codes inside ZenexErrorCode (market/src/errors.rs)', () => {
 
     it('every market code resolves with a human-readable message', () => {
         const marketCodes = Object.values(ZenexErrorCode).filter(
-            (value): value is number =>
-                typeof value === 'number' && value >= 700 && value <= 772,
+            (value): value is number => typeof value === 'number' && value >= 700 && value <= 772,
         );
         for (const code of marketCodes) {
-            expect(
-                zenexErrorFromCode(code).message,
-                `message for code ${code}`,
-            ).not.toBe(`Contract error ${code}`);
+            expect(zenexErrorFromCode(code).message, `message for code ${code}`).not.toBe(
+                `Contract error ${code}`,
+            );
         }
     });
 });
@@ -257,7 +252,15 @@ describe('util-contract and smart-account codes', () => {
     it('every util and smart-account code resolves with its own message', () => {
         const codes = [
             ...Array.from({ length: 17 }, (_, i) => 3000 + i).filter((code) => code !== 3001),
-            4002, 4003, 4004, 4005, 4006, 4007, 6001, 6002, 7001,
+            4002,
+            4003,
+            4004,
+            4005,
+            4006,
+            4007,
+            6001,
+            6002,
+            7001,
         ];
         for (const code of codes) {
             const error = zenexErrorFromCode(code);
@@ -268,10 +271,11 @@ describe('util-contract and smart-account codes', () => {
     });
 
     it('a session-policy refusal decodes from the simulation diagnostics', () => {
-        const diagnostic = 'HostError: Error(Auth, InvalidAction)\n'
-            + 'Event log (newest first):\n'
-            + '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #4006)]\n'
-            + '   1: [Diagnostic Event] contract:CPOLICY, topics:[error, Error(Contract, #4006)], data:"escalating error to panic"';
+        const diagnostic =
+            'HostError: Error(Auth, InvalidAction)\n' +
+            'Event log (newest first):\n' +
+            '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #4006)]\n' +
+            '   1: [Diagnostic Event] contract:CPOLICY, topics:[error, Error(Contract, #4006)], data:"escalating error to panic"';
         const code = parseContractErrorCode(diagnostic);
         expect(code).toBe(4006);
         expect(zenexErrorFromCode(code!).code).toBe(ZenexErrorCode.SessionForwardNotAllowed);
@@ -390,7 +394,7 @@ describe('zenexErrorFromCode (resolution without a hint)', () => {
         expect(zenexErrorFromCode(803).code).toBe(ZenexErrorCode.StrategyPayoutExceedsAssets);
         expect(zenexErrorFromCode(790).code).toBe(ZenexErrorCode.OracleFeedMismatch);
         expect(zenexErrorFromCode(790).message).toBe(
-            'Report prices a different stream than the feed anchor'
+            'Report prices a different stream than the feed anchor',
         );
         expect(zenexErrorFromCode(793).code).toBe(ZenexErrorCode.OraclePriceAhead);
     });
@@ -418,11 +422,9 @@ describe('zenexErrorFromCode (resolution without a hint)', () => {
     it('resolves the Chainlink report rejects 784/785 with their new meanings', () => {
         expect(zenexErrorFromCode(784).code).toBe(ZenexErrorCode.OracleReportExpired);
         expect(zenexErrorFromCode(784).message).toBe(
-            'Ledger clock has passed the report expiresAt'
+            'Ledger clock has passed the report expiresAt',
         );
-        expect(zenexErrorFromCode(785).code).toBe(
-            ZenexErrorCode.OracleInvalidSpreadReduction
-        );
+        expect(zenexErrorFromCode(785).code).toBe(ZenexErrorCode.OracleInvalidSpreadReduction);
         expect(zenexErrorFromCode(785).message).not.toMatch(/payload|trailing/i);
     });
 
@@ -505,19 +507,22 @@ describe('price verifier codes (the Chainlink Data Streams verifier ContractErro
         expect(new Set(messages).size).toBe(VERIFIER.length);
     });
 
-    it.each(TOKEN)('code %i is ambiguous without a hint and states both meanings', (code, tokenName) => {
-        const verifierName = `Verifier${VerifierErrorCode[code]}`;
-        const error = zenexErrorFromCode(code);
-        expect(error.code).toBe(code);
-        expect(error.ambiguous).toBe(true);
-        expect(error.source).toBeUndefined();
-        expect(error.codeName).toBe(`${tokenName}|${verifierName}`);
-        expect(error.message).toMatch(new RegExp(`^Ambiguous contract error ${code}:`));
-        expect(error.message).toContain(zenexErrorFromCode(code, 'token').message);
-        expect(error.message).toContain(zenexErrorFromCode(code, 'verifier').message);
-        expect(error.message).toContain(tokenName);
-        expect(error.message).toContain(verifierName);
-    });
+    it.each(TOKEN)(
+        'code %i is ambiguous without a hint and states both meanings',
+        (code, tokenName) => {
+            const verifierName = `Verifier${VerifierErrorCode[code]}`;
+            const error = zenexErrorFromCode(code);
+            expect(error.code).toBe(code);
+            expect(error.ambiguous).toBe(true);
+            expect(error.source).toBeUndefined();
+            expect(error.codeName).toBe(`${tokenName}|${verifierName}`);
+            expect(error.message).toMatch(new RegExp(`^Ambiguous contract error ${code}:`));
+            expect(error.message).toContain(zenexErrorFromCode(code, 'token').message);
+            expect(error.message).toContain(zenexErrorFromCode(code, 'verifier').message);
+            expect(error.message).toContain(tokenName);
+            expect(error.message).toContain(verifierName);
+        },
+    );
 
     it.each(TOKEN)('code %i resolves to %s with the token hint', (code, tokenName) => {
         const error = zenexErrorFromCode(code, 'token');
@@ -528,7 +533,7 @@ describe('price verifier codes (the Chainlink Data Streams verifier ContractErro
         expect(error.message).not.toContain('Ambiguous');
     });
 
-    it.each([14, 15, 16, 17, 18])('code %i is the verifier\'s alone and needs no hint', (code) => {
+    it.each([14, 15, 16, 17, 18])("code %i is the verifier's alone and needs no hint", (code) => {
         const bare = zenexErrorFromCode(code);
         expect(bare.ambiguous).toBe(false);
         expect(bare.codeName).toBe(`Verifier${VerifierErrorCode[code]}`);
@@ -554,8 +559,9 @@ describe('price verifier codes (the Chainlink Data Streams verifier ContractErro
     it('a directly constructed error in the shared range is honest too', () => {
         expect(new ZenexError(ZenexErrorCode.BalanceError).ambiguous).toBe(true);
         expect(new ZenexError(ZenexErrorCode.BalanceError, 'custom').message).toBe('custom');
-        expect(new ZenexError(ZenexErrorCode.BalanceError, undefined, 'token').message)
-            .toBe('Insufficient token balance');
+        expect(new ZenexError(ZenexErrorCode.BalanceError, undefined, 'token').message).toBe(
+            'Insufficient token balance',
+        );
     });
 });
 
@@ -579,96 +585,119 @@ describe('parseContractErrorCode (strict Error(Contract, #N) shape)', () => {
     const LOG = '\n\nEvent log (newest first):\n';
 
     it('takes the leading contract error and ignores the ones in the log', () => {
-        const raw = 'HostError: Error(Contract, #713)' + LOG
-            + '   0: [Diagnostic Event] contract:CA, topics:[error, Error(Contract, #713)], data:"escalating error to panic"\n'
-            + '   1: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #10)], data:["contract try_call failed", transfer, []]';
+        const raw =
+            'HostError: Error(Contract, #713)' +
+            LOG +
+            '   0: [Diagnostic Event] contract:CA, topics:[error, Error(Contract, #713)], data:"escalating error to panic"\n' +
+            '   1: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #10)], data:["contract try_call failed", transfer, []]';
         expect(parseContractErrorCode(raw)).toBe(713);
     });
 
     it('a top-level budget error is not the contract error a contract caught earlier', () => {
-        const raw = 'HostError: Error(Budget, ExceededLimit)' + LOG
-            + '   0: [Diagnostic Event] topics:[error, Error(Budget, ExceededLimit)], data:["operation instructions exceeds amount specified", 100000000]\n'
-            + '   1: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]';
+        const raw =
+            'HostError: Error(Budget, ExceededLimit)' +
+            LOG +
+            '   0: [Diagnostic Event] topics:[error, Error(Budget, ExceededLimit)], data:["operation instructions exceeds amount specified", 100000000]\n' +
+            '   1: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]';
         expect(parseContractErrorCode(raw)).toBeUndefined();
     });
 
-    it.each(['Storage, MissingValue', 'WasmVm, InvalidAction', 'Context, InvalidAction', 'Value, InvalidInput'])(
-        'a leading Error(%s) never falls back to the log',
-        (host) => {
-            const raw = `HostError: Error(${host})` + LOG
-                + '   0: [Diagnostic Event] topics:[error, Error(Contract, #720)], data:["contract try_call failed", close, []]';
-            expect(parseContractErrorCode(raw)).toBeUndefined();
-        },
-    );
+    it.each([
+        'Storage, MissingValue',
+        'WasmVm, InvalidAction',
+        'Context, InvalidAction',
+        'Value, InvalidInput',
+    ])('a leading Error(%s) never falls back to the log', (host) => {
+        const raw =
+            `HostError: Error(${host})` +
+            LOG +
+            '   0: [Diagnostic Event] topics:[error, Error(Contract, #720)], data:["contract try_call failed", close, []]';
+        expect(parseContractErrorCode(raw)).toBeUndefined();
+    });
 
     it('a leading auth error takes the code on the account-authentication event', () => {
-        const raw = 'HostError: Error(Auth, InvalidAction)' + LOG
-            + '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #4002)]\n'
-            + '   1: [Diagnostic Event] contract:CP, topics:[error, Error(Contract, #4002)], data:"escalating error to panic"\n'
-            + '   2: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]';
+        const raw =
+            'HostError: Error(Auth, InvalidAction)' +
+            LOG +
+            '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #4002)]\n' +
+            '   1: [Diagnostic Event] contract:CP, topics:[error, Error(Contract, #4002)], data:"escalating error to panic"\n' +
+            '   2: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]';
         expect(parseContractErrorCode(raw)).toBe(4002);
     });
 
     it('the account-authentication event wins over a newer contract error', () => {
-        const raw = 'HostError: Error(Auth, InvalidAction)' + LOG
-            + '   0: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]\n'
-            + '   1: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #3003)]';
+        const raw =
+            'HostError: Error(Auth, InvalidAction)' +
+            LOG +
+            '   0: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]\n' +
+            '   1: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #3003)]';
         expect(parseContractErrorCode(raw)).toBe(3003);
     });
 
     it('a leading auth error never takes a contract error the invocation survived', () => {
         // No account-authentication event: the 741 was caught by a try_call
         // and is not what failed the authentication.
-        const raw = 'HostError: Error(Auth, InvalidAction)' + LOG
-            + '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:"Unauthorized function call for address"\n'
-            + '   1: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]';
+        const raw =
+            'HostError: Error(Auth, InvalidAction)' +
+            LOG +
+            '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:"Unauthorized function call for address"\n' +
+            '   1: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]';
         expect(parseContractErrorCode(raw)).toBeUndefined();
     });
 
     it('the account-authentication event keeps its precedence when the newlines were escaped', () => {
         const raw = JSON.stringify({
-            error: 'HostError: Error(Auth, InvalidAction)' + LOG
-                + '   0: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]\n'
-                + '   1: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #3003)]',
+            error:
+                'HostError: Error(Auth, InvalidAction)' +
+                LOG +
+                '   0: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]\n' +
+                '   1: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #3003)]',
         });
         expect(raw).not.toContain('\n');
         expect(parseContractErrorCode(raw)).toBe(3003);
     });
 
     it('a leading auth error with no contract error in the log has no code', () => {
-        const raw = 'HostError: Error(Auth, InvalidAction)' + LOG
-            + '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:"Unauthorized function call for address"';
+        const raw =
+            'HostError: Error(Auth, InvalidAction)' +
+            LOG +
+            '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:"Unauthorized function call for address"';
         expect(parseContractErrorCode(raw)).toBeUndefined();
         expect(parseContractErrorCode('HostError: Error(Auth, InvalidAction)')).toBeUndefined();
     });
 
     it('splits header from log when the newlines were escaped, as in a JSON dump', () => {
         const raw = JSON.stringify({
-            error: 'HostError: Error(Budget, ExceededLimit)' + LOG
-                + '   0: [Diagnostic Event] topics:[error, Error(Contract, #741)], data:["contract try_call failed"]',
+            error:
+                'HostError: Error(Budget, ExceededLimit)' +
+                LOG +
+                '   0: [Diagnostic Event] topics:[error, Error(Contract, #741)], data:["contract try_call failed"]',
         });
         expect(parseContractErrorCode(raw)).toBeUndefined();
         const contract = JSON.stringify({
-            error: 'HostError: Error(Contract, #713)' + LOG
-                + '   0: [Diagnostic Event] topics:[error, Error(Contract, #10)], data:["contract try_call failed"]',
+            error:
+                'HostError: Error(Contract, #713)' +
+                LOG +
+                '   0: [Diagnostic Event] topics:[error, Error(Contract, #10)], data:["contract try_call failed"]',
         });
         expect(parseContractErrorCode(contract)).toBe(713);
     });
 
     it('text with no leading host error is searched as a whole', () => {
         expect(
-            parseContractErrorCode('Event log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #755)]'),
+            parseContractErrorCode(
+                'Event log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #755)]',
+            ),
         ).toBe(755);
         expect(parseContractErrorCode('topics:[error, Error(Contract, #755)]')).toBe(755);
     });
-
 
     it('parses the leading Error(Contract, #N) in both RPC and CLI shapes', () => {
         expect(parseContractErrorCode('HostError: Error(Contract, #713)')).toBe(713);
         expect(
             parseContractErrorCode(
-                'host invocation failed\n\nCaused by:\n    Error(Contract, #741)\n    Event log'
-            )
+                'host invocation failed\n\nCaused by:\n    Error(Contract, #741)\n    Event log',
+            ),
         ).toBe(741);
     });
 
@@ -692,7 +721,7 @@ describe('parseContractErrorCode (strict Error(Contract, #N) shape)', () => {
 describe('package exports', () => {
     it('exposes ./errors as a standalone subpath, typed per module format', () => {
         const packageJson = JSON.parse(
-            readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+            readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
         ) as { exports: Record<string, unknown> };
         expect(packageJson.exports['./errors']).toEqual({
             import: { types: './dist/esm/errors.d.ts', default: './dist/esm/errors.js' },
@@ -707,7 +736,7 @@ describe('package exports', () => {
 
     it('strips @internal members from the published declarations', () => {
         const tsconfig = JSON.parse(
-            readFileSync(new URL('../tsconfig.json', import.meta.url), 'utf8')
+            readFileSync(new URL('../tsconfig.json', import.meta.url), 'utf8'),
         ) as { compilerOptions: { stripInternal?: boolean } };
         expect(tsconfig.compilerOptions.stripInternal).toBe(true);
     });

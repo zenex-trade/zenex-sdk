@@ -46,8 +46,8 @@ const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BUILD_OUTPUT = 'target/wasm32v1-none/release';
 
 const coreWasmDir = resolve(
-    process.env.ZENEX_CONTRACTS_WASM_DIR
-        ?? resolve(
+    process.env.ZENEX_CONTRACTS_WASM_DIR ??
+        resolve(
             process.env.ZENEX_CONTRACTS_ROOT ?? resolve(sdkRoot, '../zenex-contracts'),
             BUILD_OUTPUT,
         ),
@@ -57,15 +57,17 @@ const coreWasmDir = resolve(
 const utilWasmDir = process.env.ZENEX_UTIL_CONTRACTS_WASM_DIR
     ? resolve(process.env.ZENEX_UTIL_CONTRACTS_WASM_DIR)
     : process.env.ZENEX_UTIL_CONTRACTS_ROOT
-        ? resolve(process.env.ZENEX_UTIL_CONTRACTS_ROOT, BUILD_OUTPUT)
-        : undefined;
+      ? resolve(process.env.ZENEX_UTIL_CONTRACTS_ROOT, BUILD_OUTPUT)
+      : undefined;
 
-const CORE_HINT = 'Download the release assets of '
-    + 'https://github.com/zenex-trade/zenex-contracts into one directory and '
-    + 'point ZENEX_CONTRACTS_WASM_DIR at it.';
-const UTIL_HINT = 'Point ZENEX_UTIL_CONTRACTS_WASM_DIR at the utility contracts\' '
-    + 'release WASMs, or ZENEX_UTIL_CONTRACTS_ROOT at a source checkout built '
-    + 'at the bound tag.';
+const CORE_HINT =
+    'Download the release assets of ' +
+    'https://github.com/zenex-trade/zenex-contracts into one directory and ' +
+    'point ZENEX_CONTRACTS_WASM_DIR at it.';
+const UTIL_HINT =
+    "Point ZENEX_UTIL_CONTRACTS_WASM_DIR at the utility contracts' " +
+    'release WASMs, or ZENEX_UTIL_CONTRACTS_ROOT at a source checkout built ' +
+    'at the bound tag.';
 
 // Keyed by crate name (also the fixture filename), with the directory the
 // WASM is read from. Order fixes the layout of the generated module.
@@ -100,20 +102,18 @@ export function findWasm(stem, wasmDir, hint) {
         if (existsSync(path)) return path;
     }
     const released = readdirSync(wasmDir).filter((file) =>
-        names.some(
-            (name) => file.startsWith(name) && RELEASE_SUFFIX.test(file.slice(name.length)),
-        ),
+        names.some((name) => file.startsWith(name) && RELEASE_SUFFIX.test(file.slice(name.length))),
     );
     if (released.length === 1) return resolve(wasmDir, released[0]);
     if (released.length > 1) {
         fail(
-            `${wasmDir} holds more than one release of ${stem} `
-            + `(${released.sort().join(', ')}). Keep one version per directory.`,
+            `${wasmDir} holds more than one release of ${stem} ` +
+                `(${released.sort().join(', ')}). Keep one version per directory.`,
         );
     }
     return fail(
-        `no WASM for ${stem} in ${wasmDir} (looked for ${names[0]}.wasm, `
-        + `${names[1]}.wasm and ${names[1]}_v<version>.wasm). ${hint}`,
+        `no WASM for ${stem} in ${wasmDir} (looked for ${names[0]}.wasm, ` +
+            `${names[1]}.wasm and ${names[1]}_v<version>.wasm). ${hint}`,
     );
 }
 
@@ -148,8 +148,8 @@ function writeOrCheck(path, expected, mode) {
     }
     if (!existsSync(path) || !readFileSync(path).equals(bytes)) {
         fail(
-            `${relative(sdkRoot, path)} is out of date. `
-            + 'Run `npm run specs:generate` and commit the result.',
+            `${relative(sdkRoot, path)} is out of date. ` +
+                'Run `npm run specs:generate` and commit the result.',
         );
     }
 }
@@ -181,8 +181,8 @@ async function run(mode) {
     }
 
     process.stdout.write(
-        `Contract specs ${mode === 'generate' ? 'generated' : 'verified'} from:\n`
-        + `${sources.join('\n')}\n`,
+        `Contract specs ${mode === 'generate' ? 'generated' : 'verified'} from:\n` +
+            `${sources.join('\n')}\n`,
     );
 }
 

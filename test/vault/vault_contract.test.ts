@@ -72,7 +72,11 @@ describe('VaultContract strategy surface', () => {
         };
         const op = VaultContract.deploy(DEPLOYER, Buffer.alloc(32, 9), args, undefined, 'hex');
         const decoded = xdr.Operation.fromXDR(op, 'base64');
-        const createContract = decoded.body().invokeHostFunctionOp().hostFunction().createContractV2();
+        const createContract = decoded
+            .body()
+            .invokeHostFunctionOp()
+            .hostFunction()
+            .createContractV2();
         const ctorArgs = createContract.constructorArgs();
         expect(ctorArgs).toHaveLength(4);
         const native = ctorArgs.map((a) => scValToNative(a));
@@ -82,20 +86,37 @@ describe('VaultContract strategy surface', () => {
     it('has none of the removed ERC-4626 methods; LP flows route through trading vault orders', () => {
         const surface = contract as unknown as Record<string, unknown>;
         const removedMethods = [
-            'deposit', 'mint', 'withdraw', 'redeem',
-            'maxDeposit', 'maxMint', 'maxWithdraw', 'maxRedeem',
-            'previewMint', 'previewWithdraw',
-            'convertToShares', 'convertToAssets',
-            'lockTime', 'availableShares',
+            'deposit',
+            'mint',
+            'withdraw',
+            'redeem',
+            'maxDeposit',
+            'maxMint',
+            'maxWithdraw',
+            'maxRedeem',
+            'previewMint',
+            'previewWithdraw',
+            'convertToShares',
+            'convertToAssets',
+            'lockTime',
+            'availableShares',
         ];
         for (const method of removedMethods) {
             expect(surface[method], `method ${method} should be removed`).toBeUndefined();
         }
         const removedParsers = [
-            'deposit', 'mint', 'withdraw', 'redeem',
-            'maxDeposit', 'maxMint', 'maxWithdraw', 'maxRedeem',
-            'previewMint', 'previewWithdraw',
-            'convertToShares', 'convertToAssets',
+            'deposit',
+            'mint',
+            'withdraw',
+            'redeem',
+            'maxDeposit',
+            'maxMint',
+            'maxWithdraw',
+            'maxRedeem',
+            'previewMint',
+            'previewWithdraw',
+            'convertToShares',
+            'convertToAssets',
         ];
         const parsers = VaultContract.parsers as unknown as Record<string, unknown>;
         for (const parser of removedParsers) {

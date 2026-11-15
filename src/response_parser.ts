@@ -67,8 +67,7 @@ function resolve(code: number, source?: ZenexErrorSource): ZenexError | undefine
 }
 
 function unknown(detail: string): ZenexError {
-    const trimmed =
-        detail.length > MAX_DETAIL ? `${detail.slice(0, MAX_DETAIL)}...` : detail;
+    const trimmed = detail.length > MAX_DETAIL ? `${detail.slice(0, MAX_DETAIL)}...` : detail;
     return new ZenexError(ZenexErrorCode.UnknownError, trimmed);
 }
 
@@ -108,17 +107,13 @@ function fromSimulationError(
 ): ZenexError {
     const code = parseContractErrorCode(raw);
     const resolved =
-        code === undefined
-            ? undefined
-            : resolve(code, hint ?? failingSource(code, raw, events));
+        code === undefined ? undefined : resolve(code, hint ?? failingSource(code, raw, events));
     if (resolved) return resolved;
 
     const host = HOST_ERROR_PATTERN.exec(raw);
     if (host === null) {
         const line = raw.split('\n', 1)[0].trim();
-        return line.length > 0
-            ? unknown(line)
-            : new ZenexError(ZenexErrorCode.UnknownError);
+        return line.length > 0 ? unknown(line) : new ZenexError(ZenexErrorCode.UnknownError);
     }
     if (host[1] === 'Contract') {
         return unknown(`Unknown contract error ${host[0]}`);
@@ -135,11 +130,7 @@ function fromSimulationError(
  * Which contract raised `code`, from the simulation's diagnostic events, or
  * from the event log in its error text when the response carries no events.
  */
-function failingSource(
-    code: number,
-    raw: string,
-    events: unknown,
-): ZenexErrorSource | undefined {
+function failingSource(code: number, raw: string, events: unknown): ZenexErrorSource | undefined {
     if (Array.isArray(events) && events.length > 0) {
         try {
             const calls = (events as xdr.DiagnosticEvent[]).map(callEvent);
@@ -190,8 +181,7 @@ function callEvent(diagnostic: xdr.DiagnosticEvent): CallEvent {
     if (code === undefined) return { kind: 'other' };
     // A caller logs a failed call as [message, function, arguments].
     const data = body.data();
-    const message =
-        data.switch().name === 'scvVec' ? text(data.vec()?.[0]) : undefined;
+    const message = data.switch().name === 'scvVec' ? text(data.vec()?.[0]) : undefined;
     if (message === 'contract call failed') {
         return { kind: 'callFailed', code, caught: false };
     }
@@ -205,9 +195,7 @@ function callEvent(diagnostic: xdr.DiagnosticEvent): CallEvent {
             emitter === null || emitter === undefined
                 ? undefined
                 : // The id is 32 raw bytes, whatever the generated type says.
-                  StrKey.encodeContract(
-                      Buffer.from(emitter as unknown as Uint8Array),
-                  ),
+                  StrKey.encodeContract(Buffer.from(emitter as unknown as Uint8Array)),
         code,
     };
 }
@@ -240,10 +228,7 @@ function fromOperationResult(operation: xdr.OperationResult): ZenexError {
         return unknown(`Operation failed: ${arm.switch().name}`);
     }
     const hostFunction = inner.invokeHostFunctionResult().switch();
-    return (
-        resolve(hostFunction.value) ??
-        unknown(`Operation failed: ${hostFunction.name}`)
-    );
+    return resolve(hostFunction.value) ?? unknown(`Operation failed: ${hostFunction.name}`);
 }
 
 /**
@@ -253,7 +238,7 @@ function fromOperationResult(operation: xdr.OperationResult): ZenexError {
  */
 export function parseResult<T>(
     response: rpc.Api.SimulateTransactionSuccessResponse | rpc.Api.GetSuccessfulTransactionResponse,
-    parser: (xdr: string) => T
+    parser: (xdr: string) => T,
 ): T | undefined {
     if ('result' in response && response.result) {
         return parser(response.result.retval.toXDR('base64'));

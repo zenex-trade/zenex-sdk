@@ -1,9 +1,9 @@
 // ESLint flat config. Lints the TypeScript sources and tests with the
 // typescript-eslint recommended rules.
 //
-// Formatting is not enforced here: the code base predates a formatter
-// config, so a Prettier rule would rewrite most files. eslint-config-prettier
-// only switches off the rules that would fight a formatter.
+// Formatting is not enforced here: Prettier owns it (`npm run format`,
+// `npm run format:check`, configured in .prettierrc.json).
+// eslint-config-prettier only switches off the rules that would fight it.
 import tseslint from '@typescript-eslint/eslint-plugin';
 import prettier from 'eslint-config-prettier';
 

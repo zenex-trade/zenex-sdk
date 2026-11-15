@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SCALAR_18 } from '../../src/math/fixed.js';
-import {
-    DELIST_DEADLINE,
-    Status,
-    VaultOrderKind,
-} from '../../src/contracts/market/types.js';
+import { DELIST_DEADLINE, Status, VaultOrderKind } from '../../src/contracts/market/types.js';
 import { Price } from '../../src/trading/price.js';
 import { OrderIntent, marketContext, previewOrder } from '../../src/trading/order.js';
 import { estimateMarket } from '../../src/trading/market_est.js';
@@ -138,15 +134,11 @@ describe('the forced-liquidation deadline', () => {
     it('measures the deadline at the snapshot time, so accrue measures it now', () => {
         const stale = at(deadline - 100n);
         expect(lonePosition().isLiquidatable(stale, px(10))).toBe(false);
-        expect(
-            lonePosition().isLiquidatable(stale.accrue(px(10), deadline), px(10)),
-        ).toBe(true);
+        expect(lonePosition().isLiquidatable(stale.accrue(px(10), deadline), px(10))).toBe(true);
     });
 
     it('forces only a Delisted market', () => {
-        expect(
-            lonePosition().isLiquidatable(at(deadline, Status.Frozen), px(10)),
-        ).toBe(false);
+        expect(lonePosition().isLiquidatable(at(deadline, Status.Frozen), px(10))).toBe(false);
     });
 
     it('never forces a flat side', () => {
@@ -208,7 +200,10 @@ describe('a terminal price replaces the caller price', () => {
             tokens: pair(unit(10), unit(6)),
             margin: pair(unit(10), unit(10)),
         };
-        const config = { borrowRate: SCALAR_18 / 1_000_000n, increasedBorrowRate: SCALAR_18 / 100_000n };
+        const config = {
+            borrowRate: SCALAR_18 / 1_000_000n,
+            increasedBorrowRate: SCALAR_18 / 100_000n,
+        };
         const flat = delisted({ data: book, config, terminalPrice: terminal });
         const atTerminal = delisted({ data: book, config });
         // The caller's $20 quote alone would move every figure below.
@@ -219,9 +214,7 @@ describe('a terminal price replaces the caller price', () => {
             atTerminal.sharesToAssets(unit(10), terminal),
         );
 
-        expect(flat.accrue(px(20), 3_600n).data).toEqual(
-            atTerminal.accrue(terminal, 3_600n).data,
-        );
+        expect(flat.accrue(px(20), 3_600n).data).toEqual(atTerminal.accrue(terminal, 3_600n).data);
         expect(flat.assetsToShares(unit(10), px(20))).toBe(
             atTerminal.assetsToShares(unit(10), terminal),
         );
@@ -229,9 +222,7 @@ describe('a terminal price replaces the caller price', () => {
             atTerminal.sharesToAssets(unit(10), terminal),
         );
         expect(flat.netPnl(px(20))).toBe(atTerminal.netPnl(terminal));
-        expect(flat.utilization(true, px(20))).toBe(
-            atTerminal.utilization(true, terminal),
-        );
+        expect(flat.utilization(true, px(20))).toBe(atTerminal.utilization(true, terminal));
 
         const estimate = estimateMarket(flat, px(20));
         const reference = estimateMarket(atTerminal, terminal);
@@ -242,17 +233,9 @@ describe('a terminal price replaces the caller price', () => {
         expect(estimate.long).toEqual(reference.long);
 
         const position = estimatePosition(flat, lonePosition(), px(20), 10n);
-        expect(position.pnl).toBe(
-            estimatePosition(atTerminal, lonePosition(), terminal, 10n).pnl,
-        );
+        expect(position.pnl).toBe(estimatePosition(atTerminal, lonePosition(), terminal, 10n).pnl);
 
-        const deposit = new VaultOrderIntent(
-            flat.id,
-            USER,
-            VaultOrderKind.Deposit,
-            unit(10),
-            0n,
-        );
+        const deposit = new VaultOrderIntent(flat.id, USER, VaultOrderKind.Deposit, unit(10), 0n);
         expect(deposit.expectedOut(flat, px(20), 3_600n)).toBe(
             deposit.expectedOut(atTerminal, terminal, 3_600n),
         );

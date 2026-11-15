@@ -1,8 +1,24 @@
 import { Status } from '../../contracts/market/types.js';
 import type { MarketData, MarketConfig } from '../../contracts/market/types.js';
 import { VIRTUAL_SHARES } from '../../contracts/vault/instance.js';
-import { BPS_DENOMINATOR, I128_MAX, SCALAR_18, addI128, checkedBps, checkedI128, mulDivCeil, mulDivFloor, subI128 } from '../../math/fixed.js';
-import { advanceMarketAccruals, marketPendingBorrowing, marketSidePnl, sideCapacity, sideReserved } from './math.js';
+import {
+    BPS_DENOMINATOR,
+    I128_MAX,
+    SCALAR_18,
+    addI128,
+    checkedBps,
+    checkedI128,
+    mulDivCeil,
+    mulDivFloor,
+    subI128,
+} from '../../math/fixed.js';
+import {
+    advanceMarketAccruals,
+    marketPendingBorrowing,
+    marketSidePnl,
+    sideCapacity,
+    sideReserved,
+} from './math.js';
 import type { PriceData } from './math.js';
 import { decodeLedgerSequence, estimate, exact, unavailable } from './quote.js';
 import type { QuoteResult } from './quote.js';
@@ -38,9 +54,7 @@ export class VaultProtocolGateError extends Error {
         /** The mirrored contract error number. */
         readonly code: number,
     ) {
-        super(
-            `contract error #${code}: ${WITHDRAW_GATE_REASONS[code] ?? 'protocol gate failed'}`,
-        );
+        super(`contract error #${code}: ${WITHDRAW_GATE_REASONS[code] ?? 'protocol gate failed'}`);
     }
 }
 
@@ -69,16 +83,10 @@ export function evaluateVaultWithdrawGates(
     price: PriceData,
     postVaultAssets: bigint,
 ): VaultWithdrawHeadroom {
-    const utilizationCapacity = sideCapacity(
-        postVaultAssets,
-        config.maxUtilWithdraw,
-    );
+    const utilizationCapacity = sideCapacity(postVaultAssets, config.maxUtilWithdraw);
     const longReserved = sideReserved(market, price, true);
     const shortReserved = sideReserved(market, price, false);
-    if (
-        longReserved > utilizationCapacity ||
-        shortReserved > utilizationCapacity
-    ) {
+    if (longReserved > utilizationCapacity || shortReserved > utilizationCapacity) {
         throw new VaultProtocolGateError(714);
     }
     const utilizationHeadroom = minimum(
@@ -92,10 +100,7 @@ export function evaluateVaultWithdrawGates(
     if (longPnl > pnlAllowance || shortPnl > pnlAllowance) {
         throw new VaultProtocolGateError(754);
     }
-    const pnlHeadroom = minimum(
-        pnlAllowance - longPnl,
-        pnlAllowance - shortPnl,
-    );
+    const pnlHeadroom = minimum(pnlAllowance - longPnl, pnlAllowance - shortPnl);
 
     return { utilizationHeadroom, pnlHeadroom };
 }
@@ -104,10 +109,7 @@ function caughtGateUnavailable<T>(error: unknown): QuoteResult<T> {
     if (error instanceof VaultProtocolGateError) {
         return unavailable('CONTRACT_GATE', error.message, error.code);
     }
-    if (
-        error instanceof RangeError &&
-        error.message.includes(OVERFLOW_MESSAGE)
-    ) {
+    if (error instanceof RangeError && error.message.includes(OVERFLOW_MESSAGE)) {
         return unavailable('CONTRACT_OVERFLOW', error.message);
     }
     return unavailable(
@@ -128,9 +130,7 @@ function caughtGateUnavailable<T>(error: unknown): QuoteResult<T> {
  * - 754 if either side's pending profit would overhang the withdraw PnL cap.
  *   A smaller withdrawal or an adverse price move clears it.
  */
-export function checkVaultWithdrawGates(
-    input: VaultGateInput,
-): QuoteResult<VaultWithdrawHeadroom> {
+export function checkVaultWithdrawGates(input: VaultGateInput): QuoteResult<VaultWithdrawHeadroom> {
     try {
         const accrued = advanceMarketAccruals(
             input.market,
@@ -140,12 +140,7 @@ export function checkVaultWithdrawGates(
             input.now,
         ).market;
         return exact(
-            evaluateVaultWithdrawGates(
-                accrued,
-                input.config,
-                input.price,
-                input.postVaultAssets,
-            ),
+            evaluateVaultWithdrawGates(accrued, input.config, input.price, input.postVaultAssets),
             input.ledger,
         );
     } catch (error) {
@@ -154,7 +149,6 @@ export function checkVaultWithdrawGates(
 }
 
 const U64_MAX = 2n ** 64n - 1n;
-
 
 const ORDER_GATE_REASONS: Readonly<Record<number, string>> = {
     702: 'invalid market status',
@@ -289,8 +283,7 @@ export interface VaultRetiredImmediateRedeem {
 }
 
 /** Outcome of `quoteVaultOrderCreation`: a resting order, or an instant retired-market redeem. */
-export type VaultOrderCreationOutcome =
-    VaultRestingOrderCreation | VaultRetiredImmediateRedeem;
+export type VaultOrderCreationOutcome = VaultRestingOrderCreation | VaultRetiredImmediateRedeem;
 
 /** An exact `quoteVaultOrderCreation` result, unwrapped from its `QuoteResult` envelope. */
 export interface ExactVaultOrderCreationQuote {
@@ -487,11 +480,7 @@ export function convertVaultSharesToAssets(
     return mulDivFloor(shares, basis.assets, basis.supply);
 }
 
-function feeSplit(
-    fee: bigint,
-    keeperRate: bigint,
-    treasuryRate: bigint,
-): VaultFeeSplit {
+function feeSplit(fee: bigint, keeperRate: bigint, treasuryRate: bigint): VaultFeeSplit {
     const keeper = mulDivFloor(fee, keeperRate, SCALAR_18);
     const treasury = mulDivFloor(fee, treasuryRate, SCALAR_18);
     return {
@@ -562,11 +551,7 @@ function requireDepositPnlGate(
  * may not price at a payload predating the commitment (equality passes), and
  * it must land in a ledger strictly later than the commitment.
  */
-function requireFillTiming(
-    price: PriceData,
-    createdAt: bigint,
-    now: bigint,
-): void {
+function requireFillTiming(price: PriceData, createdAt: bigint, now: bigint): void {
     if (price.publishTime < createdAt) throw new VaultQuoteGateError(740);
     if (now <= createdAt) throw new VaultQuoteGateError(740);
 }
@@ -618,10 +603,7 @@ function caughtUnavailable<T>(error: unknown): QuoteResult<T> {
     if (error instanceof VaultProtocolGateError) {
         return unavailable('CONTRACT_GATE', error.message, error.code);
     }
-    if (
-        error instanceof RangeError &&
-        error.message.includes(OVERFLOW_MESSAGE)
-    ) {
+    if (error instanceof RangeError && error.message.includes(OVERFLOW_MESSAGE)) {
         return unavailable('CONTRACT_OVERFLOW', error.message);
     }
     return unavailable(
@@ -648,11 +630,7 @@ export function deriveVaultMinimumOutput(
         const reference = input.reference;
         const output = checkedI128(reference.output);
         const maximumSlippageBps = checkedBps(input.maximumSlippageBps);
-        const minOut = mulDivFloor(
-            output,
-            BPS_DENOMINATOR - maximumSlippageBps,
-            BPS_DENOMINATOR,
-        );
+        const minOut = mulDivFloor(output, BPS_DENOMINATOR - maximumSlippageBps, BPS_DENOMINATOR);
 
         return estimate(
             {
@@ -750,9 +728,7 @@ export function quoteVaultOrderCreation(
                 ? saturatingTimestampAdd(createdAt, input.config.redeemLock)
                 : null;
         const escrowedAssets =
-            input.action === 'deposit'
-                ? addI128(amount, executionFee)
-                : executionFee;
+            input.action === 'deposit' ? addI128(amount, executionFee) : executionFee;
 
         return exact(
             {
@@ -838,33 +814,15 @@ export function quoteVaultDepositFill(
         // assets before anything moves, so a miss rejects the order ahead of
         // every fill gate.
         if (prepared.minOut > 0n) {
-            const quoted = convertVaultAssetsToShares(
-                prepared.vault,
-                depositAssets,
-                netPnl,
-            );
+            const quoted = convertVaultAssetsToShares(prepared.vault, depositAssets, netPnl);
             if (quoted < prepared.minOut) {
-                return exact(
-                    rejection('deposit', quoted, assets, prepared, netPnl),
-                    input.ledger,
-                );
+                return exact(rejection('deposit', quoted, assets, prepared, netPnl), input.ledger);
             }
         }
         if (depositAssets <= 0n) throw new VaultQuoteGateError(800);
-        const split = feeSplit(
-            vaultFee,
-            input.config.keeperRate,
-            prepared.treasuryRate,
-        );
-        const shares = convertVaultAssetsToShares(
-            prepared.vault,
-            depositAssets,
-            netPnl,
-        );
-        if (
-            shares >
-            I128_MAX - VIRTUAL_SHARES - prepared.vault.totalSupply
-        ) {
+        const split = feeSplit(vaultFee, input.config.keeperRate, prepared.treasuryRate);
+        const shares = convertVaultAssetsToShares(prepared.vault, depositAssets, netPnl);
+        if (shares > I128_MAX - VIRTUAL_SHARES - prepared.vault.totalSupply) {
             throw new VaultQuoteGateError(802);
         }
         const postVaultAssets = addI128(
@@ -930,16 +888,11 @@ function saturatingTimestampAdd(left: bigint, right: bigint): bigint {
  * - 714 or 754 if the withdraw gates block the fill; see
  *   `evaluateVaultWithdrawGates` for the condition and what clears it.
  */
-export function quoteVaultRedeemFill(
-    input: VaultRedeemQuoteInput,
-): QuoteResult<VaultQuoteOutcome> {
+export function quoteVaultRedeemFill(input: VaultRedeemQuoteInput): QuoteResult<VaultQuoteOutcome> {
     try {
         const prepared = prepareContext(input);
         requireFillTiming(input.price, input.createdAt, input.now);
-        if (
-            input.now <
-            saturatingTimestampAdd(input.createdAt, input.config.redeemLock)
-        ) {
+        if (input.now < saturatingTimestampAdd(input.createdAt, input.config.redeemLock)) {
             throw new VaultQuoteGateError(751);
         }
         const shares = input.shares;
@@ -956,40 +909,24 @@ export function quoteVaultRedeemFill(
             prepared.treasuryRate,
             true,
         );
-        const grossAssets = convertVaultSharesToAssets(
-            prepared.vault,
-            shares,
-            netPnl,
-        );
+        const grossAssets = convertVaultSharesToAssets(prepared.vault, shares, netPnl);
         const vaultFee = mulDivFloor(grossAssets, input.config.redeemFee, SCALAR_18);
         const output = subI128(grossAssets, vaultFee);
         // The slippage bound reads the vault's own quote net of the redeem
         // fee before anything burns, so a miss rejects the order ahead of the
         // burn and the exit gates.
         if (prepared.minOut > 0n && output < prepared.minOut) {
-            return exact(
-                rejection('redeem', output, shares, prepared, netPnl),
-                input.ledger,
-            );
+            return exact(rejection('redeem', output, shares, prepared, netPnl), input.ledger);
         }
         if (grossAssets > prepared.vault.totalAssets) {
             throw new VaultQuoteGateError(803);
         }
-        const split = feeSplit(
-            vaultFee,
-            input.config.keeperRate,
-            prepared.treasuryRate,
-        );
+        const split = feeSplit(vaultFee, input.config.keeperRate, prepared.treasuryRate);
         const postVaultAssets = addI128(
             subI128(prepared.vault.totalAssets, grossAssets),
             split.vault,
         );
-        evaluateVaultWithdrawGates(
-            prepared.market,
-            input.config,
-            input.price,
-            postVaultAssets,
-        );
+        evaluateVaultWithdrawGates(prepared.market, input.config, input.price, postVaultAssets);
 
         return exact(
             {
@@ -1011,15 +948,11 @@ export function quoteVaultRedeemFill(
 }
 
 /** @deprecated Use quoteVaultDepositFill for the keeper fill leg. */
-export function quoteVaultDeposit(
-    input: VaultDepositQuoteInput,
-): QuoteResult<VaultQuoteOutcome> {
+export function quoteVaultDeposit(input: VaultDepositQuoteInput): QuoteResult<VaultQuoteOutcome> {
     return quoteVaultDepositFill(input);
 }
 
 /** @deprecated Use quoteVaultRedeemFill for the keeper fill leg. */
-export function quoteVaultRedeem(
-    input: VaultRedeemQuoteInput,
-): QuoteResult<VaultQuoteOutcome> {
+export function quoteVaultRedeem(input: VaultRedeemQuoteInput): QuoteResult<VaultQuoteOutcome> {
     return quoteVaultRedeemFill(input);
 }

@@ -95,9 +95,7 @@ describe('parseMarketInstance', () => {
     });
 
     it('rejects a non-instance value', () => {
-        expect(() => parseMarketInstance(xdr.ScVal.scvU32(1))).toThrow(
-            /contract-instance/,
-        );
+        expect(() => parseMarketInstance(xdr.ScVal.scvU32(1))).toThrow(/contract-instance/);
         expect(() => parseMarketInstance(xdr.ScVal.scvU32(1))).toThrow(
             expect.objectContaining({ name: 'MarketStateError', code: 'MISSING_STATE' }),
         );

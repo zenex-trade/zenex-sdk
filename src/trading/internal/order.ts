@@ -1,5 +1,11 @@
 import type { Call, OrderParams } from '../../contracts/router/types.js';
-import { FULL_CLOSE, MAX_ORDERS_PER_SIDE, OrderKind, Status, VaultOrderKind } from '../../contracts/market/types.js';
+import {
+    FULL_CLOSE,
+    MAX_ORDERS_PER_SIDE,
+    OrderKind,
+    Status,
+    VaultOrderKind,
+} from '../../contracts/market/types.js';
 import type { Position, MarketConfig } from '../../contracts/market/types.js';
 import type { i128, u32 } from '../../index.js';
 import { ZenexErrorCode } from '../../errors.js';
@@ -65,10 +71,7 @@ export function isTriggerOrderKind(kind: OrderKind): boolean {
  * Return the price crossing that makes a side-specific order eligible.
  * Market orders have no crossing and return `null`.
  */
-export function orderKindCrossing(
-    kind: OrderKind,
-    isLong: boolean,
-): OrderKindCrossing | null {
+export function orderKindCrossing(kind: OrderKind, isLong: boolean): OrderKindCrossing | null {
     switch (kind) {
         case OrderKind.MarketIncrease:
         case OrderKind.MarketDecrease:
@@ -88,10 +91,7 @@ export function orderKindCrossing(
  * Return whether a trigger fires on an upward crossing. Market orders return
  * `null` because they do not have a trigger direction.
  */
-export function orderKindFiresAbove(
-    kind: OrderKind,
-    isLong: boolean,
-): boolean | null {
+export function orderKindFiresAbove(kind: OrderKind, isLong: boolean): boolean | null {
     const crossing = orderKindCrossing(kind, isLong);
     return crossing === null ? null : crossing === 'above';
 }
@@ -297,9 +297,7 @@ export function closePositionParams(args: ClosePositionArgs): OrderParams {
  * Decrease a position at market (`MarketDecrease`), optionally withdrawing
  * margin. `triggerPrice` is always 0; a market kind never reads it.
  */
-export function decreasePositionParams(
-    args: DecreasePositionArgs,
-): OrderParams {
+export function decreasePositionParams(args: DecreasePositionArgs): OrderParams {
     return {
         market: args.market,
         user: args.user,
@@ -486,10 +484,7 @@ function issue(
 
 function validU32(value: unknown): value is number {
     return (
-        typeof value === 'number' &&
-        Number.isSafeInteger(value) &&
-        value >= 0 &&
-        value <= U32_MAX
+        typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= U32_MAX
     );
 }
 
@@ -502,13 +497,7 @@ function checkedAtomic(
         return checkedI128(value as bigint);
     } catch (error) {
         issues.push(
-            issue(
-                710,
-                field,
-                error instanceof Error
-                    ? error.message
-                    : `${field} is not an i128`,
-            ),
+            issue(710, field, error instanceof Error ? error.message : `${field} is not an i128`),
         );
         return undefined;
     }
@@ -519,24 +508,14 @@ function checkedAtomic(
  * for a long increase or a short decrease, the bid for a short increase or
  * a long decrease. `price.bid` and `price.ask` are 18-dec.
  */
-export function orderExecutionPrice(
-    kind: OrderKind,
-    isLong: boolean,
-    price: PriceData,
-): bigint {
+export function orderExecutionPrice(kind: OrderKind, isLong: boolean, price: PriceData): bigint {
     if (isIncreaseOrderKind(kind)) return isLong ? price.ask : price.bid;
     return isLong ? price.bid : price.ask;
 }
 
 function validatePrice(price: PriceData): OrderValidationIssue[] {
     if (price.bid <= 0n || price.ask <= 0n || price.bid > price.ask) {
-        return [
-            issue(
-                ZenexErrorCode.QuoteInvalidInput,
-                'batch',
-                'market price is malformed',
-            ),
-        ];
+        return [issue(ZenexErrorCode.QuoteInvalidInput, 'batch', 'market price is malformed')];
     }
     return [];
 }
@@ -597,13 +576,7 @@ export function validateOrder(
         ledger = decodeLedgerSequence(context.ledger);
     } catch (error) {
         issues.push(
-            issue(
-                0,
-                'batch',
-                error instanceof Error
-                    ? error.message
-                    : 'invalid validation ledger',
-            ),
+            issue(0, 'batch', error instanceof Error ? error.message : 'invalid validation ledger'),
         );
     }
     const minOrderNotional = context.config.minOrderNotional;
@@ -624,11 +597,7 @@ export function validateOrder(
 
     const notional = checkedAtomic(params.notional, 'notional', issues);
     const margin = checkedAtomic(params.margin, 'margin', issues);
-    const triggerPrice = checkedAtomic(
-        params.triggerPrice,
-        'triggerPrice',
-        issues,
-    );
+    const triggerPrice = checkedAtomic(params.triggerPrice, 'triggerPrice', issues);
     const priceBound = checkedAtomic(params.priceBound, 'priceBound', issues);
 
     if (notional !== undefined && notional < 0n) {
@@ -638,33 +607,17 @@ export function validateOrder(
         issues.push(issue(710, 'margin', 'margin must be nonnegative'));
     }
     if (triggerPrice !== undefined && triggerPrice < 0n) {
-        issues.push(
-            issue(710, 'triggerPrice', 'trigger price must be nonnegative'),
-        );
+        issues.push(issue(710, 'triggerPrice', 'trigger price must be nonnegative'));
     }
     if (priceBound !== undefined && priceBound < 0n) {
-        issues.push(
-            issue(710, 'priceBound', 'price bound must be nonnegative'),
-        );
+        issues.push(issue(710, 'priceBound', 'price bound must be nonnegative'));
     }
 
     if (notional !== undefined && notional > 0n && notional < minOrderNotional) {
-        issues.push(
-            issue(732, 'notional', 'notional is below the order dust floor'),
-        );
+        issues.push(issue(732, 'notional', 'notional is below the order dust floor'));
     }
-    if (
-        margin !== undefined &&
-        margin > 0n &&
-        margin < minOrderMargin
-    ) {
-        issues.push(
-            issue(
-                732,
-                'margin',
-                'margin is below the order dust floor',
-            ),
-        );
+    if (margin !== undefined && margin > 0n && margin < minOrderMargin) {
+        issues.push(issue(732, 'margin', 'margin is below the order dust floor'));
     }
     if (notional === 0n && margin === 0n) {
         issues.push(issue(732, 'batch', 'order cannot be a no-op'));
@@ -674,53 +627,25 @@ export function validateOrder(
         const kind = params.kind as OrderKind;
         if (isTriggerOrderKind(kind) && triggerPrice === 0n) {
             issues.push(
-                issue(
-                    732,
-                    'triggerPrice',
-                    'trigger order requires a positive trigger price',
-                ),
+                issue(732, 'triggerPrice', 'trigger order requires a positive trigger price'),
             );
         }
-        if (
-            isIncreaseOrderKind(kind) &&
-            notional !== undefined &&
-            notional > maxPositionNotional
-        ) {
-            issues.push(
-                issue(
-                    712,
-                    'notional',
-                    'increase exceeds maximum position notional',
-                ),
-            );
+        if (isIncreaseOrderKind(kind) && notional !== undefined && notional > maxPositionNotional) {
+            issues.push(issue(712, 'notional', 'increase exceeds maximum position notional'));
         }
         if (
             isIncreaseOrderKind(kind) &&
             margin !== undefined &&
             margin > I128_MAX - context.config.execFee
         ) {
-            issues.push(
-                issue(
-                    732,
-                    'margin',
-                    'margin plus the execution fee overflows the escrow',
-                ),
-            );
+            issues.push(issue(732, 'margin', 'margin plus the execution fee overflows the escrow'));
         }
     }
 
     if (!validU32(params.expiration)) {
-        issues.push(
-            issue(731, 'expiration', 'expiration must be a u32 ledger'),
-        );
+        issues.push(issue(731, 'expiration', 'expiration must be a u32 ledger'));
     } else if (ledger !== undefined && params.expiration < ledger) {
-        issues.push(
-            issue(
-                731,
-                'expiration',
-                'order expiration is behind the snapshot ledger',
-            ),
-        );
+        issues.push(issue(731, 'expiration', 'order expiration is behind the snapshot ledger'));
     }
 
     // The pending-decrease cap trips after every structural check, when
@@ -731,13 +656,7 @@ export function validateOrder(
         context.position !== undefined &&
         context.position.decreaseOrders.length >= MAX_ORDERS_PER_SIDE
     ) {
-        issues.push(
-            issue(
-                733,
-                'kind',
-                'side already holds the maximum pending decrease orders',
-            ),
-        );
+        issues.push(issue(733, 'kind', 'side already holds the maximum pending decrease orders'));
     }
 
     if (context.price !== undefined) {
@@ -755,19 +674,10 @@ export function validateOrder(
                 params.isLong,
                 context.price,
             );
-            const buy =
-                isIncreaseOrderKind(params.kind as OrderKind) === params.isLong;
-            const within = buy
-                ? executionPrice <= priceBound
-                : executionPrice >= priceBound;
+            const buy = isIncreaseOrderKind(params.kind as OrderKind) === params.isLong;
+            const within = buy ? executionPrice <= priceBound : executionPrice >= priceBound;
             if (!within) {
-                issues.push(
-                    issue(
-                        741,
-                        'priceBound',
-                        'market execution price exceeds price bound',
-                    ),
-                );
+                issues.push(issue(741, 'priceBound', 'market execution price exceeds price bound'));
             }
         }
     }
@@ -787,20 +697,11 @@ export function decodeCreateOrderCall(call: Call): OrderParams {
         throw new TypeError('call function must be create_order');
     }
     if (!Array.isArray(call.args) || call.args.length !== 8) {
-        throw new TypeError(
-            'create_order call must contain exactly eight arguments',
-        );
+        throw new TypeError('create_order call must contain exactly eight arguments');
     }
-    const [
-        ,
-        isLong,
-        kind,
-        notional,
-        margin,
-        triggerPrice,
-        priceBound,
-        expiration,
-    ] = call.args.map((arg) => scValToNative(arg));
+    const [, isLong, kind, notional, margin, triggerPrice, priceBound, expiration] = call.args.map(
+        (arg) => scValToNative(arg),
+    );
     const decoded: OrderParams = {
         market: Address.fromString(call.contract).toString(),
         user: Address.fromScVal(call.args[0]).toString(),

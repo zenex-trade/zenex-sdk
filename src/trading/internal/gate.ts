@@ -7,10 +7,7 @@ import { ZenexError, ZenexErrorCode, zenexErrorFromCode } from '../../errors.js'
  * sentinel message.
  */
 export function zenexErrorFromGate(code: number, reason: string): ZenexError {
-    if (
-        code === ZenexErrorCode.QuoteInvalidInput ||
-        code === ZenexErrorCode.QuoteOverflow
-    ) {
+    if (code === ZenexErrorCode.QuoteInvalidInput || code === ZenexErrorCode.QuoteOverflow) {
         return new ZenexError(code, reason);
     }
     return zenexErrorFromCode(code);

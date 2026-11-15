@@ -105,9 +105,10 @@ export function callToScVal(call: Call): xdr.ScVal {
 export function parseCallOutcome(raw: xdr.ScVal): CallOutcome {
     if (raw.switch() === xdr.ScValType.scvError()) {
         const error = raw.error();
-        const code = error.switch() === xdr.ScErrorType.sceContract()
-            ? error.contractCode()
-            : UNTYPED_FAILURE;
+        const code =
+            error.switch() === xdr.ScErrorType.sceContract()
+                ? error.contractCode()
+                : UNTYPED_FAILURE;
         return { ok: false, value: undefined, error: code };
     }
     return { ok: true, value: scValToNative(raw), error: 0 };

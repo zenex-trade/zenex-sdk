@@ -92,11 +92,7 @@ export class MarketPosition implements MarketPositionFields {
         // The constructor took ten positional arguments before 1.0.0.
         // Called that way from untyped code, it would build a position of
         // `undefined` fields without a complaint.
-        if (
-            typeof fields !== 'object' ||
-            fields === null ||
-            typeof fields.isLong !== 'boolean'
-        ) {
+        if (typeof fields !== 'object' || fields === null || typeof fields.isLong !== 'boolean') {
             throw new TypeError(
                 'new MarketPosition() takes one fields object: new MarketPosition({ isLong, margin, ... })',
             );
@@ -168,10 +164,7 @@ export class MarketPosition implements MarketPositionFields {
      * settled equity, which nets both, so use `isLiquidatable` for the gate.
      */
     equity(market: Market, price: PriceInput): bigint {
-        const mark = exitPrice(
-            marketPrice(market, price, quoteTime(market)),
-            this.isLong,
-        );
+        const mark = exitPrice(marketPrice(market, price, quoteTime(market)), this.isLong);
         return positionEquity(this, market.data, mark, SCALAR_18, this.isLong);
     }
 
@@ -195,11 +188,7 @@ export class MarketPosition implements MarketPositionFields {
 
     /** The margin the maintenance requirement demands, token-dec, rounded up as the contract rounds. */
     maintenanceMargin(market: Market): bigint {
-        return mulDivCeil(
-            this.notional,
-            market.config.maintenanceMargin,
-            SCALAR_18,
-        );
+        return mulDivCeil(this.notional, market.config.maintenanceMargin, SCALAR_18);
     }
 
     /**
@@ -250,12 +239,7 @@ export class MarketPosition implements MarketPositionFields {
     }
 
     /** Pre-flight `order` against this position at `price`. Delegates to {@link previewOrder}. */
-    preview(
-        market: Market,
-        order: OrderParams,
-        price: PriceInput,
-        now?: bigint,
-    ): OrderEstimate {
+    preview(market: Market, order: OrderParams, price: PriceInput, now?: bigint): OrderEstimate {
         return previewOrder(market, this, order, price, now);
     }
 }

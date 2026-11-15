@@ -166,9 +166,6 @@ function textExceeds(text: string, value: bigint, decimals: number): boolean {
     if (match[4] === undefined && fraction.length > decimals) return true;
     const magnitude = BigInt(match[2] + fraction);
     const digits = match[1] === '-' ? -magnitude : magnitude;
-    const shift =
-        BigInt(match[4] ?? 0) - BigInt(fraction.length) + BigInt(decimals);
-    return shift >= 0n
-        ? digits * 10n ** shift > value
-        : digits > value * 10n ** -shift;
+    const shift = BigInt(match[4] ?? 0) - BigInt(fraction.length) + BigInt(decimals);
+    return shift >= 0n ? digits * 10n ** shift > value : digits > value * 10n ** -shift;
 }

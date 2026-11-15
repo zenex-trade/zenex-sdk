@@ -84,20 +84,17 @@ describe('contract codes on every CONTRACT_GATE', () => {
     it('reports the creation code first when two gates fail together', () => {
         // A dust-sized open on a frozen market: creation returns 704.
         const market = fixtureMarket({ status: Status.Frozen });
-        const result = applyOrder(
-            marketContext(market, flatPosition(), px(1), 1n, USER),
-            {
-                market: market.id,
-                user: USER,
-                isLong: true,
-                kind: OrderKind.MarketIncrease,
-                notional: 1n,
-                margin: unit(10),
-                triggerPrice: 0n,
-                priceBound: 0n,
-                expiration: 1_000,
-            },
-        );
+        const result = applyOrder(marketContext(market, flatPosition(), px(1), 1n, USER), {
+            market: market.id,
+            user: USER,
+            isLong: true,
+            kind: OrderKind.MarketIncrease,
+            notional: 1n,
+            margin: unit(10),
+            triggerPrice: 0n,
+            priceBound: 0n,
+            expiration: 1_000,
+        });
         expect(result).toMatchObject({ kind: 'gate', code: 704 });
     });
 });

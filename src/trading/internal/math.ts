@@ -1,5 +1,12 @@
 import type { MarketData, Position, SidePair, MarketConfig } from '../../contracts/market/types.js';
-import { SCALAR_18, addI128, checkedI128, mulDivCeil, mulDivFloor, subI128 } from '../../math/fixed.js';
+import {
+    SCALAR_18,
+    addI128,
+    checkedI128,
+    mulDivCeil,
+    mulDivFloor,
+    subI128,
+} from '../../math/fixed.js';
 /**
  * Verified oracle price consumed by the math mirrors. Ports the oracle
  * contract's `PriceData` minus `feed_id`, which no engine rule reads:
@@ -42,11 +49,7 @@ export function entryPrice(price: PriceData, isLong: boolean): bigint {
  * trader like the close mark: a long floors, a short ceils. Mirrors
  * `Position::increase`'s `to_tokens_floor` / `to_tokens_ceil` split.
  */
-export function entryTokens(
-    notional: bigint,
-    price: bigint,
-    isLong: boolean,
-): bigint {
+export function entryTokens(notional: bigint, price: bigint, isLong: boolean): bigint {
     return isLong
         ? mulDivFloor(notional, SCALAR_18, price)
         : mulDivCeil(notional, SCALAR_18, price);
@@ -65,9 +68,7 @@ export function exitPrice(price: PriceData, isLong: boolean): bigint {
  * the true reserve.
  */
 export function sideReserved(data: MarketData, price: PriceData, isLong: boolean): bigint {
-    return isLong
-        ? mulDivCeil(data.tokens.long, price.ask, SCALAR_18)
-        : data.notional.short;
+    return isLong ? mulDivCeil(data.tokens.long, price.ask, SCALAR_18) : data.notional.short;
 }
 
 /**
@@ -135,7 +136,7 @@ export function quoteTradeFees(
 
     // The improving leg is the notional remainder, as on chain.
     let worseningTokens: bigint;
-    if (before !== 0n && after !== 0n && (before < 0n) !== (after < 0n)) {
+    if (before !== 0n && after !== 0n && before < 0n !== after < 0n) {
         worseningTokens = magnitude(after);
     } else if (magnitude(after) > magnitude(before)) {
         worseningTokens = deltaTokens;
@@ -144,9 +145,7 @@ export function quoteTradeFees(
     }
 
     const notional = magnitude(notionalDelta);
-    const worsening = deltaTokens === 0n
-        ? 0n
-        : mulDivCeil(notional, worseningTokens, deltaTokens);
+    const worsening = deltaTokens === 0n ? 0n : mulDivCeil(notional, worseningTokens, deltaTokens);
     const improving = subI128(notional, worsening);
     const base = addI128(
         mulDivCeil(worsening, config.feeDom, SCALAR_18),
@@ -159,24 +158,17 @@ export function quoteTradeFees(
     return { worsening, improving, base, impact };
 }
 
-
 /**
  * Signed PnL of `position` if it closed now, token-dec. Positive is profit.
  *
  * A long is `floor(tokens * bid / SCALAR_18) - notional`. A short is
  * `notional - ceil(tokens * ask / SCALAR_18)`. Both round against the trader.
  */
-export function exactPositionPnl(
-    position: Position,
-    price: PriceData,
-    isLong: boolean,
-): bigint {
+export function exactPositionPnl(position: Position, price: PriceData, isLong: boolean): bigint {
     const marked = isLong
         ? mulDivFloor(position.tokens, exitPrice(price, isLong), SCALAR_18)
         : mulDivCeil(position.tokens, exitPrice(price, isLong), SCALAR_18);
-    return isLong
-        ? subI128(marked, position.notional)
-        : subI128(position.notional, marked);
+    return isLong ? subI128(marked, position.notional) : subI128(position.notional, marked);
 }
 
 /**
@@ -189,24 +181,15 @@ export function exactPositionPnl(
  * it has no notional (the paid total pools instead of crediting anyone).
  * A zero stored rate accrues nothing on either side.
  */
-export function marketFundingRatesPerSide(
-    data: MarketData,
-    config: MarketConfig,
-): SidePair {
+export function marketFundingRatesPerSide(data: MarketData, config: MarketConfig): SidePair {
     if (data.fundingRate === 0n) return { long: 0n, short: 0n };
     const longsPay = data.fundingRate > 0n;
-    const magnitude =
-        data.fundingRate < 0n ? -data.fundingRate : data.fundingRate;
-    const charged =
-        magnitude > config.fundingMin ? magnitude : config.fundingMin;
+    const magnitude = data.fundingRate < 0n ? -data.fundingRate : data.fundingRate;
+    const charged = magnitude > config.fundingMin ? magnitude : config.fundingMin;
     const payerNotional = longsPay ? data.notional.long : data.notional.short;
-    const receiverNotional = longsPay
-        ? data.notional.short
-        : data.notional.long;
+    const receiverNotional = longsPay ? data.notional.short : data.notional.long;
     const receiverDelta =
-        receiverNotional > 0n
-            ? mulDivFloor(charged, payerNotional, receiverNotional)
-            : 0n;
+        receiverNotional > 0n ? mulDivFloor(charged, payerNotional, receiverNotional) : 0n;
     return longsPay
         ? { long: charged, short: -receiverDelta }
         : { long: -receiverDelta, short: charged };
@@ -283,9 +266,7 @@ export function marketPendingBorrowing(data: MarketData, maximize: boolean): big
         );
         pending = addI128(pending, side > 0n ? side : 0n);
     }
-    return maximize
-        ? mulDivFloor(pending, 1n, SCALAR_18)
-        : mulDivCeil(pending, 1n, SCALAR_18);
+    return maximize ? mulDivFloor(pending, 1n, SCALAR_18) : mulDivCeil(pending, 1n, SCALAR_18);
 }
 
 /** Result of advancing a market's accrual indices to a quote time. */
@@ -311,7 +292,6 @@ function cloneMarket(data: MarketData): MarketData {
         borrowingWeight: clonePair(data.borrowingWeight),
     };
 }
-
 
 function get(pair: SidePair, isLong: boolean): bigint {
     return isLong ? pair.long : pair.short;
@@ -385,11 +365,7 @@ export function advanceBorrowing(
     return next;
 }
 
-function evolvedFundingRate(
-    data: MarketData,
-    config: MarketConfig,
-    elapsed: bigint,
-): bigint {
+function evolvedFundingRate(data: MarketData, config: MarketConfig, elapsed: bigint): bigint {
     const saved = data.fundingRate;
     const total = addI128(data.tokens.long, data.tokens.short);
     if (total === 0n) return 0n;
@@ -455,8 +431,7 @@ export function advanceFunding(
 
     const longsPay = next.fundingRate > 0n;
     const rateMagnitude = magnitude(next.fundingRate);
-    const chargedRate =
-        rateMagnitude > config.fundingMin ? rateMagnitude : config.fundingMin;
+    const chargedRate = rateMagnitude > config.fundingMin ? rateMagnitude : config.fundingMin;
     const payDelta = mulDivFloor(chargedRate, elapsed, 1n);
     set(next.fundingIdx, longsPay, addI128(get(next.fundingIdx, longsPay), payDelta));
 
@@ -464,11 +439,7 @@ export function advanceFunding(
     const receiverNotional = get(next.notional, !longsPay);
     if (receiverNotional > 0n) {
         const receiverDelta = mulDivFloor(payDelta, payerNotional, receiverNotional);
-        set(
-            next.fundingIdx,
-            !longsPay,
-            subI128(get(next.fundingIdx, !longsPay), receiverDelta),
-        );
+        set(next.fundingIdx, !longsPay, subI128(get(next.fundingIdx, !longsPay), receiverDelta));
     }
 
     return next;

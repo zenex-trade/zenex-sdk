@@ -41,7 +41,7 @@ export function marketPriceCacheLedgerKey(contractId: string): xdr.LedgerKey {
 export function marketPositionLedgerKey(
     contractId: string,
     user: string | Address,
-    isLong: boolean
+    isLong: boolean,
 ): xdr.LedgerKey {
     return persistentLedgerKey(contractId, [
         xdr.ScVal.scvSymbol('Position'),
@@ -54,7 +54,7 @@ export function marketPositionLedgerKey(
 export function marketVaultOrderLedgerKey(
     contractId: string,
     user: string | Address,
-    id: number
+    id: number,
 ): xdr.LedgerKey {
     return persistentLedgerKey(contractId, [
         xdr.ScVal.scvSymbol('VaultOrder'),
@@ -64,17 +64,33 @@ export function marketVaultOrderLedgerKey(
 }
 
 /** `DataKey::OrderCounter(user)` -> u32: next id for trade and vault orders, allocated from 1 (persistent user tier). */
-export function marketOrderCounterLedgerKey(contractId: string, user: string | Address): xdr.LedgerKey {
-    return persistentLedgerKey(contractId, [xdr.ScVal.scvSymbol('OrderCounter'), toAddressScVal(user)]);
+export function marketOrderCounterLedgerKey(
+    contractId: string,
+    user: string | Address,
+): xdr.LedgerKey {
+    return persistentLedgerKey(contractId, [
+        xdr.ScVal.scvSymbol('OrderCounter'),
+        toAddressScVal(user),
+    ]);
 }
 
 /** `DataKey::ClaimableCredit(user)` -> i128: funding owed to the user, plus any parked failed payout, in token-dec (persistent user tier). */
-export function marketClaimableCreditLedgerKey(contractId: string, user: string | Address): xdr.LedgerKey {
-    return persistentLedgerKey(contractId, [xdr.ScVal.scvSymbol('ClaimableCredit'), toAddressScVal(user)]);
+export function marketClaimableCreditLedgerKey(
+    contractId: string,
+    user: string | Address,
+): xdr.LedgerKey {
+    return persistentLedgerKey(contractId, [
+        xdr.ScVal.scvSymbol('ClaimableCredit'),
+        toAddressScVal(user),
+    ]);
 }
 
 /** `DataKey::Order(user, id)` -> Order: pending keeper order (persistent user tier, 100/120-day TTL). */
-export function marketOrderLedgerKey(contractId: string, user: string | Address, id: number): xdr.LedgerKey {
+export function marketOrderLedgerKey(
+    contractId: string,
+    user: string | Address,
+    id: number,
+): xdr.LedgerKey {
     return persistentLedgerKey(contractId, [
         xdr.ScVal.scvSymbol('Order'),
         toAddressScVal(user),

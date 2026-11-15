@@ -36,6 +36,4 @@ export interface FactoryInitMetaUpdateEvent extends BaseFactoryEvent {
 
 /** Discriminated union of all factory contract events, including its ownership events. */
 export type FactoryEvent =
-    | FactoryDeployEvent
-    | FactoryInitMetaUpdateEvent
-    | OwnableEvent<ZenexContractType.Factory>;
+    FactoryDeployEvent | FactoryInitMetaUpdateEvent | OwnableEvent<ZenexContractType.Factory>;

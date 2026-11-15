@@ -19,9 +19,7 @@ export interface GovernanceInstanceState {
  * Decode a governance contract-instance value. Throws unless `Delay` is set.
  * It is a constructor invariant.
  */
-export function parseGovernanceInstance(
-    instanceVal: xdr.ScVal,
-): GovernanceInstanceState {
+export function parseGovernanceInstance(instanceVal: xdr.ScVal): GovernanceInstanceState {
     const storage = instanceStorage(instanceVal, 'governance');
     const nonce = storage.get('Nonce');
     return {

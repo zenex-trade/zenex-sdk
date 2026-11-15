@@ -30,10 +30,7 @@ const FORBIDDEN = [
 
 describe('negative public SDK boundary', () => {
     it('does not export unsafe, obsolete, infrastructure, or generic submit APIs', () => {
-        const surfaces = [SDK, Market] as readonly Record<
-            string,
-            unknown
-        >[];
+        const surfaces = [SDK, Market] as readonly Record<string, unknown>[];
         for (const surface of surfaces) {
             for (const name of FORBIDDEN) expect(surface[name]).toBeUndefined();
         }

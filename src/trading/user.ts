@@ -103,11 +103,7 @@ export class MarketUser implements MarketUserFields {
         // The constructor took positional arguments before 1.0.0. Called
         // that way from untyped code, it would build a user of `undefined`
         // fields without a complaint.
-        if (
-            typeof fields !== 'object' ||
-            fields === null ||
-            typeof fields.marketId !== 'string'
-        ) {
+        if (typeof fields !== 'object' || fields === null || typeof fields.marketId !== 'string') {
             throw new TypeError(
                 'new MarketUser() takes one fields object: new MarketUser({ marketId, userId, ... })',
             );
@@ -126,11 +122,7 @@ export class MarketUser implements MarketUserFields {
      * `getLedgerEntries`, four keys. An archived entry decodes as usual and
      * is listed in {@link MarketUser.archived}; it never fails the read.
      */
-    static async load(
-        network: Network,
-        marketId: string,
-        userId: string,
-    ): Promise<MarketUser> {
+    static async load(network: Network, marketId: string, userId: string): Promise<MarketUser> {
         const keys = marketUserKeys(marketId, userId);
         const batch = await readEntries(network, [
             keys.long,
@@ -156,19 +148,12 @@ export class MarketUser implements MarketUserFields {
      *
      * @throws {RangeError} if `lookback` is not a non-negative safe integer.
      */
-    async loadOrders(
-        network: Network,
-        lookback?: number,
-    ): Promise<PendingOrder[]> {
+    async loadOrders(network: Network, lookback?: number): Promise<PendingOrder[]> {
         const requested = lookback ?? DEFAULT_ORDER_LOOKBACK;
         if (!Number.isSafeInteger(requested) || requested < 0) {
             throw new RangeError('lookback must be a non-negative safe integer');
         }
-        const window = Math.min(
-            requested,
-            MAX_ORDER_LOOKBACK,
-            this.orderCounter - 1,
-        );
+        const window = Math.min(requested, MAX_ORDER_LOOKBACK, this.orderCounter - 1);
         if (window <= 0) return [];
 
         const from = this.orderCounter - window;
@@ -181,11 +166,7 @@ export class MarketUser implements MarketUserFields {
             probes.push({
                 id,
                 order: marketOrderLedgerKey(this.marketId, this.userId, id),
-                vaultOrder: marketVaultOrderLedgerKey(
-                    this.marketId,
-                    this.userId,
-                    id,
-                ),
+                vaultOrder: marketVaultOrderLedgerKey(this.marketId, this.userId, id),
             });
         }
         const batch = await readEntries(
@@ -226,8 +207,7 @@ export class MarketUser implements MarketUserFields {
      */
     claimable(market: Market): bigint {
         const pool = market.data.creditPool;
-        const amount =
-            this.claimableCredit < pool ? this.claimableCredit : pool;
+        const amount = this.claimableCredit < pool ? this.claimableCredit : pool;
         return amount > 0n ? amount : 0n;
     }
 }
@@ -250,11 +230,7 @@ export function marketUserKeys(
  * rows archive after about 120 idle days, but an archived value is still
  * the user's state, so it decodes and is listed rather than failing the read.
  */
-export function decodeUser(
-    marketId: string,
-    userId: string,
-    batch: EntryBatch,
-): MarketUser {
+export function decodeUser(marketId: string, userId: string, batch: EntryBatch): MarketUser {
     const keys = marketUserKeys(marketId, userId);
     const archived: MarketUserEntry[] = [];
     const read = (name: MarketUserEntry): xdr.ScVal | undefined => {

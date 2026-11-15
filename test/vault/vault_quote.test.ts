@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { I128_MAX, SCALAR_18 } from '../../src/math/fixed.js';
 import type { PriceData } from '../../src/trading/internal/math.js';
-import type {
-    MarketData,
-    SidePair,
-    MarketConfig,
-} from '../../src/contracts/market/types.js';
+import type { MarketData, SidePair, MarketConfig } from '../../src/contracts/market/types.js';
 import {
     convertVaultAssetsToShares,
     convertVaultSharesToAssets,
@@ -294,9 +290,7 @@ function price(overrides: Partial<PriceData> = {}): PriceData {
     };
 }
 
-function context(
-    overrides: Partial<VaultQuoteContext> = {},
-): VaultQuoteContext {
+function context(overrides: Partial<VaultQuoteContext> = {}): VaultQuoteContext {
     return {
         ledger: 42,
         now: 2n,
@@ -344,35 +338,23 @@ function marketContext(id: string): {
     const common = context({
         now,
         market: market({
-            notional: pair(
-                inputs.long_notional as bigint,
-                inputs.short_notional as bigint,
-            ),
-            margin: pair(
-                inputs.long_collateral as bigint,
-                inputs.short_collateral as bigint,
-            ),
-            tokens: pair(
-                inputs.long_tokens as bigint,
-                inputs.short_tokens as bigint,
-            ),
+            notional: pair(inputs.long_notional as bigint, inputs.short_notional as bigint),
+            margin: pair(inputs.long_collateral as bigint, inputs.short_collateral as bigint),
+            tokens: pair(inputs.long_tokens as bigint, inputs.short_tokens as bigint),
             accruedAt: now,
         }),
         config: config({
             keeperRate: inputs.keeper_rate as bigint,
-            maxUtilWithdraw:
-                (inputs.max_util_withdraw as bigint | undefined) ?? SCALAR_18,
+            maxUtilWithdraw: (inputs.max_util_withdraw as bigint | undefined) ?? SCALAR_18,
             maxPnlTrader: inputs.max_pnl_trader as bigint,
             maxPnlWithdraw:
-                (inputs.max_pnl_withdraw as bigint | undefined) ??
-                150_000_000_000_000_000n,
+                (inputs.max_pnl_withdraw as bigint | undefined) ?? 150_000_000_000_000_000n,
             depositFee: (inputs.deposit_fee as bigint | undefined) ?? 0n,
             redeemFee: (inputs.redeem_fee as bigint | undefined) ?? 0n,
             redeemLock: 0n,
             minDeposit: 1n,
             maxVaultBalance:
-                (inputs.max_vault_balance as bigint | undefined) ??
-                10_000_000_000_000n,
+                (inputs.max_vault_balance as bigint | undefined) ?? 10_000_000_000_000n,
         }),
         price: price({
             bid: inputs.bid as bigint,
@@ -418,22 +400,25 @@ describe('strategy-vault share conversion', () => {
     // offset the instance stores: 1_000 assets into an empty vault mint
     // 1_000 * (0 + 1e6) / (0 + 1), and 2e9 shares of a 3e9 supply over 4_000
     // of assets redeem floor(2e9 * 4_001 / (3e9 + 1e6)) = 2_666.
-    it.each([0, 6])('uses the constant virtual shares at a stored offset of %i', (decimalsOffset) => {
-        expect(
-            convertVaultAssetsToShares(
-                { totalAssets: 0n, totalSupply: 0n, decimalsOffset },
-                1_000n,
-                0n,
-            ),
-        ).toBe(1_000_000_000n);
-        expect(
-            convertVaultSharesToAssets(
-                { totalAssets: 4_000n, totalSupply: 3_000_000_000n, decimalsOffset },
-                2_000_000_000n,
-                0n,
-            ),
-        ).toBe(2_666n);
-    });
+    it.each([0, 6])(
+        'uses the constant virtual shares at a stored offset of %i',
+        (decimalsOffset) => {
+            expect(
+                convertVaultAssetsToShares(
+                    { totalAssets: 0n, totalSupply: 0n, decimalsOffset },
+                    1_000n,
+                    0n,
+                ),
+            ).toBe(1_000_000_000n);
+            expect(
+                convertVaultSharesToAssets(
+                    { totalAssets: 4_000n, totalSupply: 3_000_000_000n, decimalsOffset },
+                    2_000_000_000n,
+                    0n,
+                ),
+            ).toBe(2_666n);
+        },
+    );
 
     it('uses widened multiplication but rejects an i128 result overflow', () => {
         const inputs = strategyOverflowInputs;
@@ -450,9 +435,7 @@ describe('strategy-vault share conversion', () => {
 
 describe('trading vault fill sequence', () => {
     it('reports gross assets and keeps execution fee outside vault backing', () => {
-        const { input } = marketContext(
-            'vault.deposit.pnl_fee_settlement_success',
-        );
+        const { input } = marketContext('vault.deposit.pnl_fee_settlement_success');
         const result = quoteVaultDeposit(input as VaultDepositQuoteInput);
 
         expect(result.kind).toBe('exact');
@@ -466,9 +449,7 @@ describe('trading vault fill sequence', () => {
     });
 
     it('applies the redeem cooldown gate', () => {
-        const { input } = marketContext(
-            'vault.redeem.pnl_fee_settlement_success',
-        );
+        const { input } = marketContext('vault.redeem.pnl_fee_settlement_success');
         const base = input as VaultRedeemQuoteInput;
         const locked = quoteVaultRedeem({
             ...base,
@@ -602,9 +583,7 @@ describe('trading vault fill sequence', () => {
 
         // A deposit no longer fills while a side's profit sits above the
         // cap: the order stays resting behind PendingPnlExceeded.
-        expect(
-            quoteVaultDeposit({ ...capped, assets: 100n, createdAt: 1n }),
-        ).toEqual({
+        expect(quoteVaultDeposit({ ...capped, assets: 100n, createdAt: 1n })).toEqual({
             kind: 'unavailable',
             code: 'CONTRACT_GATE',
             reason: expect.stringContaining('#754'),
@@ -632,9 +611,7 @@ describe('trading vault fill sequence', () => {
     });
 
     it('checks deposit minOut against the shares the post-fee assets mint', () => {
-        const { input } = marketContext(
-            'vault.deposit.pnl_fee_settlement_success',
-        );
+        const { input } = marketContext('vault.deposit.pnl_fee_settlement_success');
         const base = input as VaultDepositQuoteInput;
 
         // The 1% fee takes 10 of the 1_001 assets; the 991 left mint
@@ -667,9 +644,7 @@ describe('trading vault fill sequence', () => {
     });
 
     it('rejects a missed deposit minOut ahead of the vault balance cap', () => {
-        const { input } = marketContext(
-            'vault.deposit.pnl_fee_settlement_success',
-        );
+        const { input } = marketContext('vault.deposit.pnl_fee_settlement_success');
         const base = input as VaultDepositQuoteInput;
         // One below the 10_996 post-fill balance, so the cap trips.
         const capped = { ...base, config: config({ ...base.config, maxVaultBalance: 10_995n }) };
@@ -685,9 +660,7 @@ describe('trading vault fill sequence', () => {
     });
 
     it('checks redeem minOut against the assets net of the redeem fee', () => {
-        const { input } = marketContext(
-            'vault.redeem.pnl_fee_settlement_success',
-        );
+        const { input } = marketContext('vault.redeem.pnl_fee_settlement_success');
         const result = quoteVaultRedeem({
             ...(input as VaultRedeemQuoteInput),
             minOut: 992n,
@@ -713,9 +686,7 @@ describe('trading vault fill sequence', () => {
     });
 
     it('rejects a missed redeem minOut ahead of the exit gates', () => {
-        const { input } = marketContext(
-            'vault.redeem.pnl_fee_settlement_success',
-        );
+        const { input } = marketContext('vault.redeem.pnl_fee_settlement_success');
         const base = input as VaultRedeemQuoteInput;
         // A zero withdraw allowance, so the pending-PnL gate trips.
         const gated = { ...base, config: config({ ...base.config, maxPnlWithdraw: 1n }) };
@@ -731,9 +702,7 @@ describe('trading vault fill sequence', () => {
     });
 
     it('keeps the redeem cooldown ahead of a minOut rejection', () => {
-        const { input } = marketContext(
-            'vault.redeem.pnl_fee_settlement_success',
-        );
+        const { input } = marketContext('vault.redeem.pnl_fee_settlement_success');
         const base = input as VaultRedeemQuoteInput;
         const result = quoteVaultRedeem({
             ...base,
@@ -839,9 +808,7 @@ describe('trading vault fill sequence', () => {
 
 describe('withdrawal gates', () => {
     it('returns zero utilization headroom at the exact boundary', () => {
-        const { input, work } = marketContext(
-            'vault.utilization.exact_boundary_pass',
-        );
+        const { input, work } = marketContext('vault.utilization.exact_boundary_pass');
         const result = checkVaultWithdrawGates({
             ...(input as VaultRedeemQuoteInput),
             postVaultAssets: work.vault_balance_after_settlement as bigint,
@@ -858,9 +825,7 @@ describe('withdrawal gates', () => {
     });
 
     it('returns zero PnL headroom at the exact boundary', () => {
-        const { input, work } = marketContext(
-            'vault.pending_pnl.exact_boundary_pass',
-        );
+        const { input, work } = marketContext('vault.pending_pnl.exact_boundary_pass');
         const result = checkVaultWithdrawGates({
             ...(input as VaultRedeemQuoteInput),
             postVaultAssets: work.vault_balance_after_settlement as bigint,

@@ -1,11 +1,6 @@
 import { scValToNative } from '@stellar/stellar-sdk';
 import type { Network } from '../index.js';
-import type {
-    AdlState,
-    MarketData,
-    Status,
-    MarketConfig,
-} from '../contracts/market/types.js';
+import type { AdlState, MarketData, Status, MarketConfig } from '../contracts/market/types.js';
 import { parseMarketData } from '../contracts/market/types.js';
 import { parseMarketInstance } from '../contracts/market/instance.js';
 import type { MarketInstanceState } from '../contracts/market/instance.js';
@@ -85,8 +80,7 @@ function frozenData(data: MarketData | ReadonlyMarketData): ReadonlyMarketData {
     }
     const copy: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data)) {
-        copy[key] =
-            typeof value === 'object' && value !== null ? frozen(value) : value;
+        copy[key] = typeof value === 'object' && value !== null ? frozen(value) : value;
     }
     return Object.freeze(copy) as unknown as ReadonlyMarketData;
 }
@@ -248,11 +242,7 @@ export class Market implements MarketFields {
         // The constructor took positional arguments before 1.0.0. Called
         // that way from untyped code, it would build a snapshot of
         // `undefined` fields without a complaint.
-        if (
-            typeof fields !== 'object' ||
-            fields === null ||
-            typeof fields.id !== 'string'
-        ) {
+        if (typeof fields !== 'object' || fields === null || typeof fields.id !== 'string') {
             throw new TypeError(
                 'new Market() takes one fields object: new Market({ id, ledger, ... })',
             );
@@ -302,10 +292,7 @@ export class Market implements MarketFields {
      *   TTL-expired; `IDENTITY_MISMATCH` when the instance names a
      *   different vault, token, oracle or treasury than `contracts`.
      */
-    static async load(
-        network: Network,
-        contracts: MarketContracts,
-    ): Promise<Market> {
+    static async load(network: Network, contracts: MarketContracts): Promise<Market> {
         const keys = marketKeys(contracts);
         const batch = await readEntries(network, [
             keys.instance,
@@ -329,9 +316,7 @@ export class Market implements MarketFields {
     ): Promise<Required<MarketContracts>> {
         const key = contractInstanceLedgerKey(marketId);
         const batch = await readEntries(network, [key]);
-        const instance = parseMarketInstance(
-            batch.require(key, `market instance ${marketId}`),
-        );
+        const instance = parseMarketInstance(batch.require(key, `market instance ${marketId}`));
         return {
             market: marketId,
             vault: instance.vault,
@@ -424,9 +409,7 @@ export class Market implements MarketFields {
         const reserved = sideReserved(this.data, this.priceAt(price), isLong);
         const capacity = sideCapacity(this.vaultAssets, this.config.maxUtilOpen);
         const utilHeadroom = zero(capacity - reserved);
-        const notional = isLong
-            ? this.data.notional.long
-            : this.data.notional.short;
+        const notional = isLong ? this.data.notional.long : this.data.notional.short;
         const oiHeadroom = zero(this.config.maxOpenInterest - notional);
         return utilHeadroom < oiHeadroom ? utilHeadroom : oiHeadroom;
     }
@@ -615,9 +598,7 @@ export function marketKeys(contracts: MarketContracts): {
  * @internal The oracle and treasury instance keys the caller already knows,
  * so the first round trip can read them alongside the market.
  */
-function knownLinkKeys(
-    contracts: MarketContracts,
-): ReturnType<typeof contractInstanceLedgerKey>[] {
+function knownLinkKeys(contracts: MarketContracts): ReturnType<typeof contractInstanceLedgerKey>[] {
     const known: ReturnType<typeof contractInstanceLedgerKey>[] = [];
     if (contracts.oracle !== undefined) {
         known.push(contractInstanceLedgerKey(contracts.oracle));
@@ -660,8 +641,7 @@ async function readLinks(
         ...(contracts.oracle === undefined ? [oracleKey] : []),
         ...(contracts.treasury === undefined ? [treasuryKey] : []),
     ];
-    const second =
-        unnamed.length > 0 ? await readEntries(network, unnamed) : batch;
+    const second = unnamed.length > 0 ? await readEntries(network, unnamed) : batch;
     const oracle = parseOracleInstance(
         (contracts.oracle === undefined ? second : batch).require(
             oracleKey,
@@ -705,17 +685,10 @@ async function decodeMarket(
         );
     }
     requireWiring(contracts.market, 'oracle', instance.oracle, contracts.oracle);
-    requireWiring(
-        contracts.market,
-        'treasury',
-        instance.treasury,
-        contracts.treasury,
-    );
+    requireWiring(contracts.market, 'treasury', instance.treasury, contracts.treasury);
 
     const data = parseMarketData(
-        scValToNative(
-            batch.require(keys.data, `market data for ${contracts.market}`),
-        ),
+        scValToNative(batch.require(keys.data, `market data for ${contracts.market}`)),
     );
 
     const vaultInstance = parseVaultInstance(

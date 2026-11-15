@@ -11,9 +11,7 @@ export interface FactoryInstanceState {
 }
 
 /** Throws unless `InitMeta` is set. It is a constructor invariant. */
-export function parseFactoryInstance(
-    instanceVal: xdr.ScVal,
-): FactoryInstanceState {
+export function parseFactoryInstance(instanceVal: xdr.ScVal): FactoryInstanceState {
     const storage = instanceStorage(instanceVal, 'factory');
     return {
         initMeta: scValToNative(storage.require('InitMeta')) as FactoryInitMeta,

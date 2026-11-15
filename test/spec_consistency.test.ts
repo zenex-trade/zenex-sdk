@@ -113,15 +113,18 @@ describe('contract spec consistency', () => {
 
         // The class must expose exactly the entries in its generated array —
         // round-tripping through contract.Spec proves every entry is valid XDR.
-        expect(entry.contract.spec.entries.map((specEntry) => specEntry.toXDR('base64')))
-            .toEqual(entry.spec);
+        expect(entry.contract.spec.entries.map((specEntry) => specEntry.toXDR('base64'))).toEqual(
+            entry.spec,
+        );
     });
 
     it.each(contracts)('$source consumes only its generated $exportName array', (entry) => {
         const source = readFileSync(`${repoRoot}/${entry.source}`, 'utf8');
 
         expect(source).toContain(`import { ${entry.exportName} } from '../contract_specs.js';`);
-        expect(source).toContain(`static spec: contract.Spec = new contract.Spec(${entry.exportName});`);
+        expect(source).toContain(
+            `static spec: contract.Spec = new contract.Spec(${entry.exportName});`,
+        );
         expect(source).not.toMatch(/new contract\.Spec\(\[\s*['"]/);
     });
 
@@ -130,9 +133,7 @@ describe('contract spec consistency', () => {
     // builders after the deployed router dropped them.
     it.each(contracts)('$source invokes only entry points its spec declares', (entry) => {
         const source = readFileSync(`${repoRoot}/${entry.source}`, 'utf8');
-        const declared = new Set(
-            entry.contract.spec.funcs().map((func) => func.name().toString()),
-        );
+        const declared = new Set(entry.contract.spec.funcs().map((func) => func.name().toString()));
         const named = [...source.matchAll(/this\.call\(\s*(['"`])([a-z0-9_]+)\1/g)];
         const forwarded = source.match(/this\.call\(\s*call\.func\b/g) ?? [];
         const built = [...source.matchAll(/\bfunc:\s*(['"`])([a-z0-9_]+)\1/g)];
@@ -140,12 +141,8 @@ describe('contract spec consistency', () => {
         // Every invocation must be readable here: a literal name in any quote
         // style, or a `call.func` forwarded from a builder's literal `func:`.
         // An invocation named any other way would escape the check below.
-        expect(named.length + forwarded.length).toBe(
-            source.match(/this\.call\(/g)?.length ?? 0,
-        );
-        expect(built.length).toBe(
-            source.match(/\bfunc:(?!\s*string\b)/g)?.length ?? 0,
-        );
+        expect(named.length + forwarded.length).toBe(source.match(/this\.call\(/g)?.length ?? 0);
+        expect(built.length).toBe(source.match(/\bfunc:(?!\s*string\b)/g)?.length ?? 0);
 
         const invoked = [...named, ...built].map((match) => match[2]);
         expect(invoked.length).toBeGreaterThan(0);

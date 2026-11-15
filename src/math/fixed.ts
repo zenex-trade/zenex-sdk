@@ -50,18 +50,14 @@ function divFloor(numerator: bigint, denominator: bigint): bigint {
     if (denominator === 0n) throw new RangeError('division by zero');
     const quotient = numerator / denominator;
     const remainder = numerator % denominator;
-    return remainder !== 0n && ((remainder < 0n) !== (denominator < 0n))
-        ? quotient - 1n
-        : quotient;
+    return remainder !== 0n && remainder < 0n !== denominator < 0n ? quotient - 1n : quotient;
 }
 
 function divCeil(numerator: bigint, denominator: bigint): bigint {
     if (denominator === 0n) throw new RangeError('division by zero');
     const quotient = numerator / denominator;
     const remainder = numerator % denominator;
-    return remainder !== 0n && ((remainder < 0n) === (denominator < 0n))
-        ? quotient + 1n
-        : quotient;
+    return remainder !== 0n && remainder < 0n === denominator < 0n ? quotient + 1n : quotient;
 }
 
 /**

@@ -511,6 +511,7 @@ math it mirrors:
 npm test
 npm run typecheck          # src and test
 npm run lint
+npm run format:check       # Prettier; npm run format rewrites
 npm run architecture:check
 npm run build
 npm run specs:check        # needs the release WASMs, see below

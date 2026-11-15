@@ -40,13 +40,16 @@ export function parseTokenBalance(val: xdr.ScVal): bigint {
  * @param accountAddress - The account to get balance for
  * @returns Ledger key for the balance entry
  */
-export function tokenBalanceLedgerKey(tokenContractId: string, accountAddress: string): xdr.LedgerKey {
+export function tokenBalanceLedgerKey(
+    tokenContractId: string,
+    accountAddress: string,
+): xdr.LedgerKey {
     return xdr.LedgerKey.contractData(
         new xdr.LedgerKeyContractData({
             contract: Address.fromString(tokenContractId).toScAddress(),
             key: enumStorageKeyWithAddress('Balance', accountAddress),
             durability: xdr.ContractDataDurability.persistent(),
-        })
+        }),
     );
 }
 
@@ -82,10 +85,8 @@ export async function loadTokenBalance(
     token: string,
     holder: string,
 ): Promise<bigint> {
-    const { result } = await simulateAndParse(
-        network,
-        balanceOperation(token, holder),
-        (retval) => scValToBigInt(xdr.ScVal.fromXDR(retval, 'base64')),
+    const { result } = await simulateAndParse(network, balanceOperation(token, holder), (retval) =>
+        scValToBigInt(xdr.ScVal.fromXDR(retval, 'base64')),
     );
     return result;
 }
@@ -102,7 +103,5 @@ export async function loadTokenBalances(
     tokens: readonly string[],
     holder: string,
 ): Promise<bigint[]> {
-    return Promise.all(
-        tokens.map((token) => loadTokenBalance(network, token, holder)),
-    );
+    return Promise.all(tokens.map((token) => loadTokenBalance(network, token, holder)));
 }

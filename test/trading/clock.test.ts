@@ -41,9 +41,7 @@ describe('a lagging clock never gates a preview', () => {
         });
         const behind = previewOrder(market, flatPosition(), order, px(10), ACCRUED - 1n);
         expect(behind.outcome).toBe('fills');
-        expect(behind).toEqual(
-            previewOrder(market, flatPosition(), order, px(10), ACCRUED),
-        );
+        expect(behind).toEqual(previewOrder(market, flatPosition(), order, px(10), ACCRUED));
     });
 
     it('clamps the wall clock the same way when no time is passed', () => {
@@ -52,9 +50,7 @@ describe('a lagging clock never gates a preview', () => {
             notional: unit(100),
             margin: unit(20),
         });
-        expect(previewOrder(market, flatPosition(), order, px(10)).outcome).toBe(
-            'fills',
-        );
+        expect(previewOrder(market, flatPosition(), order, px(10)).outcome).toBe('fills');
     });
 
     it('stamps a bare price no earlier than the position mark (#740)', () => {
@@ -65,9 +61,7 @@ describe('a lagging clock never gates a preview', () => {
         const order = new OrderIntent(market, USER, true).addMargin(unit(1));
 
         expect(previewOrder(market, position, order, px(10)).outcome).toBe('fills');
-        expect(previewOrder(market, position, order, px(10), ACCRUED + 3n).outcome).toBe(
-            'fills',
-        );
+        expect(previewOrder(market, position, order, px(10), ACCRUED + 3n).outcome).toBe('fills');
         // An explicit report older than the mark still gates, as on chain.
         const stale = previewOrder(
             market,
@@ -90,12 +84,7 @@ describe('a lagging clock never gates a preview', () => {
         expect(later.price.publishTime).toBe(ACCRUED + 50n);
 
         // A full Price keeps its own observation time.
-        const report = marketContext(
-            market,
-            position,
-            new Price(px(10), px(10), 7n),
-            ACCRUED,
-        );
+        const report = marketContext(market, position, new Price(px(10), px(10), 7n), ACCRUED);
         expect(report.price.publishTime).toBe(7n);
     });
 
@@ -107,13 +96,7 @@ describe('a lagging clock never gates a preview', () => {
     });
 
     it('advises a vault deposit created behind the accrual as fillable', () => {
-        const intent = new VaultOrderIntent(
-            market.id,
-            USER,
-            VaultOrderKind.Deposit,
-            unit(100),
-            0n,
-        );
+        const intent = new VaultOrderIntent(market.id, USER, VaultOrderKind.Deposit, unit(100), 0n);
         expect(intent.fills(market, px(10), ACCRUED - 5n)).toEqual({ fills: true });
     });
 });

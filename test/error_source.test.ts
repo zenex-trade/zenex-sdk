@@ -29,9 +29,7 @@ type Fixture =
 
 /** A captured response, parsed the way `rpc.Server.simulateTransaction` parses it. */
 function simulation(name: Fixture): rpc.Api.SimulateTransactionErrorResponse {
-    const path = fileURLToPath(
-        new URL(`./fixtures/simulations/${name}.json`, import.meta.url),
-    );
+    const path = fileURLToPath(new URL(`./fixtures/simulations/${name}.json`, import.meta.url));
     const raw = JSON.parse(readFileSync(path, 'utf8')) as {
         result: rpc.Api.RawSimulateTransactionResponse;
     };
@@ -70,7 +68,7 @@ describe('parseError decides a shared code from the failed simulation', () => {
         // The same relay, paying a fee recipient with no trustline: two token
         // calls land before the third fails.
         ['forward-create-and-fill-token-trustline', 13, 'TrustlineMissingError'],
-    ])('%s: code %i is the token\'s %s', (name, code, codeName) => {
+    ])("%s: code %i is the token's %s", (name, code, codeName) => {
         const error = parseError(simulation(name));
         expect(error.code).toBe(code);
         expect(error.source).toBe('token');
@@ -89,7 +87,7 @@ describe('parseError decides a shared code from the failed simulation', () => {
         // land (approve, fee collection, fee payout, escrow), then the
         // report is rejected.
         ['forward-create-and-fill-verifier'],
-    ])('%s: code 9 is the verifier\'s DigestNotSet', (name) => {
+    ])("%s: code 9 is the verifier's DigestNotSet", (name) => {
         const error = parseError(simulation(name));
         expect(error.code).toBe(9);
         expect(error.source).toBe('verifier');
@@ -111,8 +109,9 @@ describe('parseError decides a shared code from the failed simulation', () => {
         const response = simulation('create-and-fill-verifier');
         expect(parseError(response, 'token').source).toBe('token');
         expect(parseError(response, 'token').codeName).toBe('AllowanceError');
-        expect(parseError(simulation('token-transfer-balance'), 'verifier').codeName)
-            .toBe('VerifierDigestInactive');
+        expect(parseError(simulation('token-transfer-balance'), 'verifier').codeName).toBe(
+            'VerifierDigestInactive',
+        );
     });
 
     it('simulateAndParse throws the decided error without an errorSource', async () => {
@@ -184,7 +183,7 @@ describe('parseError keeps a shared code ambiguous when the simulation does not 
         expectAmbiguous(parseError(withEvents(response, errors)), 9);
     });
 
-    it('a failing call that is neither the verifier\'s nor a token function', () => {
+    it("a failing call that is neither the verifier's nor a token function", () => {
         const response = simulation('oracle-verify-price');
         // The same events with the verifier's entry point renamed.
         const renamed = response.events.map((event) =>
@@ -213,7 +212,7 @@ describe('parseError keeps a shared code ambiguous when the simulation does not 
 // captured events above, written in the host's documented text form (the
 // `Display` of a host event, under `Event log (newest first):`), which is
 // what the CLI and a host error's debug output print.
-describe('inferErrorSource reads the host\'s event log text (synthetic text of the captured events)', () => {
+describe("inferErrorSource reads the host's event log text (synthetic text of the captured events)", () => {
     it.each<[Fixture, 'token' | 'verifier']>([
         ['token-transfer-balance', 'token'],
         ['create-and-fill-token-balance', 'token'],
@@ -274,7 +273,10 @@ describe('inferErrorSource reads the host\'s event log text (synthetic text of t
         expect(inferErrorSource(text)).toBe('verifier');
         // With the verifier's failure removed the invocation's last failure
         // is the caught transfer, which is not what ended it: undecided.
-        const caughtOnly = text.split('\n').filter((line) => !/^ {3}[0-4]: /.test(line)).join('\n');
+        const caughtOnly = text
+            .split('\n')
+            .filter((line) => !/^ {3}[0-4]: /.test(line))
+            .join('\n');
         expect(inferErrorSource(caughtOnly)).toBeUndefined();
     });
 
@@ -289,9 +291,7 @@ describe('inferErrorSource reads the host\'s event log text (synthetic text of t
 function topic(event: xdr.DiagnosticEvent, index: number): string | undefined {
     const value = event.event().body().v0().topics()[index];
     const kind = value?.switch().name;
-    return kind === 'scvSymbol' || kind === 'scvString'
-        ? String(scValToNative(value))
-        : undefined;
+    return kind === 'scvSymbol' || kind === 'scvString' ? String(scValToNative(value)) : undefined;
 }
 
 /** A copy of `event` with one topic replaced by a symbol. */

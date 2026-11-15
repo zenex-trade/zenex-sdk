@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import {
-    Address,
-    SorobanDataBuilder,
-    StrKey,
-    nativeToScVal,
-    rpc,
-    xdr,
-} from '@stellar/stellar-sdk';
+import { Address, SorobanDataBuilder, StrKey, nativeToScVal, rpc, xdr } from '@stellar/stellar-sdk';
 import {
     enumStorageKeyWithAddress,
     decodeEntryKey,
     contractInstanceLedgerKey,
 } from '../src/contracts/keys.js';
 import { tokenBalanceLedgerKey } from '../src/token.js';
-import { parseAtomic, toFixed, toFloat, mulDivFloor, mulDivCeil, SCALAR_18 } from '../src/math/index.js';
+import {
+    parseAtomic,
+    toFixed,
+    toFloat,
+    mulDivFloor,
+    mulDivCeil,
+    SCALAR_18,
+} from '../src/math/index.js';
 import { simulateAndParse } from '../src/simulate.js';
 import { ZenexError, ZenexErrorCode } from '../src/errors.js';
 import { TreasuryContract } from '../src/contracts/treasury/contract.js';
@@ -30,10 +30,7 @@ afterEach(() => {
 describe('ledger-keys generic builders', () => {
     it('enumStorageKeyWithAddress accepts string and Address', () => {
         const fromString = enumStorageKeyWithAddress('Balance', USER);
-        const fromAddress = enumStorageKeyWithAddress(
-            'Balance',
-            Address.fromString(USER),
-        );
+        const fromAddress = enumStorageKeyWithAddress('Balance', Address.fromString(USER));
         expect(fromString.toXDR('base64')).toBe(fromAddress.toXDR('base64'));
         expect(decodeEntryKey(fromString)).toBe('Balance');
     });
@@ -42,30 +39,20 @@ describe('ledger-keys generic builders', () => {
         const key = tokenBalanceLedgerKey(TOKEN, USER);
         const data = key.contractData();
         expect(Address.fromScAddress(data.contract()).toString()).toBe(TOKEN);
-        expect(data.durability()).toEqual(
-            xdr.ContractDataDurability.persistent(),
-        );
+        expect(data.durability()).toEqual(xdr.ContractDataDurability.persistent());
         expect(decodeEntryKey(data.key())).toBe('Balance');
     });
 
     it('decodeEntryKey handles symbol, vec, instance, and rejects others', () => {
         expect(decodeEntryKey(xdr.ScVal.scvSymbol('Config'))).toBe('Config');
-        expect(decodeEntryKey(xdr.ScVal.scvLedgerKeyContractInstance())).toBe(
-            'ContractInstance',
-        );
-        expect(() => decodeEntryKey(xdr.ScVal.scvU32(1))).toThrow(
-            /Invalid ledger entry key type/,
-        );
-        expect(() => decodeEntryKey(xdr.ScVal.scvVec([]))).toThrow(
-            /vec or its first element/,
-        );
+        expect(decodeEntryKey(xdr.ScVal.scvLedgerKeyContractInstance())).toBe('ContractInstance');
+        expect(() => decodeEntryKey(xdr.ScVal.scvU32(1))).toThrow(/Invalid ledger entry key type/);
+        expect(() => decodeEntryKey(xdr.ScVal.scvVec([]))).toThrow(/vec or its first element/);
     });
 
     it('contractInstanceLedgerKey targets the instance entry', () => {
         const key = contractInstanceLedgerKey(CONTRACT_ID);
-        expect(decodeEntryKey(key.contractData().key())).toBe(
-            'ContractInstance',
-        );
+        expect(decodeEntryKey(key.contractData().key())).toBe('ContractInstance');
     });
 });
 
@@ -123,21 +110,19 @@ describe('simulateAndParse', () => {
     const op = new TreasuryContract(CONTRACT_ID).getRate();
 
     it('parses a successful simulation', async () => {
-        vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue(
-            {
-                id: '1',
-                latestLedger: 42,
-                events: [],
-                _parsed: true,
-                transactionData: new SorobanDataBuilder(),
-                minResourceFee: '0',
-                result: {
-                    auth: [],
-                    xdr: '',
-                    retval: nativeToScVal(9n, { type: 'i128' }),
-                },
-            } as never,
-        );
+        vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue({
+            id: '1',
+            latestLedger: 42,
+            events: [],
+            _parsed: true,
+            transactionData: new SorobanDataBuilder(),
+            minResourceFee: '0',
+            result: {
+                auth: [],
+                xdr: '',
+                retval: nativeToScVal(9n, { type: 'i128' }),
+            },
+        } as never);
         const { result, latestLedger } = await simulateAndParse(
             network,
             op,
@@ -148,13 +133,11 @@ describe('simulateAndParse', () => {
     });
 
     it('throws on a failed simulation', async () => {
-        vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue(
-            {
-                latestLedger: 42,
-                events: [],
-                error: 'host error',
-            } as never,
-        );
+        vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue({
+            latestLedger: 42,
+            events: [],
+            error: 'host error',
+        } as never);
         await expect(
             simulateAndParse(network, op, TreasuryContract.parsers.getRate),
         ).rejects.toThrow(/Simulation failed/);
@@ -162,14 +145,15 @@ describe('simulateAndParse', () => {
 
     it('throws a ZenexError that keeps the decoded code and the raw error', async () => {
         const raw = 'HostError: Error(Contract, #713)\n\nEvent log ...';
-        vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue(
-            { id: '1', latestLedger: 42, events: [], error: raw } as never,
+        vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue({
+            id: '1',
+            latestLedger: 42,
+            events: [],
+            error: raw,
+        } as never);
+        const error = await simulateAndParse(network, op, TreasuryContract.parsers.getRate).catch(
+            (caught: unknown) => caught,
         );
-        const error = await simulateAndParse(
-            network,
-            op,
-            TreasuryContract.parsers.getRate,
-        ).catch((caught: unknown) => caught);
         expect(error).toBeInstanceOf(ZenexError);
         expect((error as ZenexError).code).toBe(ZenexErrorCode.InsufficientMargin);
         expect((error as ZenexError).message).toBe(
@@ -179,14 +163,12 @@ describe('simulateAndParse', () => {
     });
 
     it('names a host error outside any contract', async () => {
-        vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue(
-            {
-                id: '1',
-                latestLedger: 42,
-                events: [],
-                error: 'HostError: Error(Storage, MissingValue)',
-            } as never,
-        );
+        vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue({
+            id: '1',
+            latestLedger: 42,
+            events: [],
+            error: 'HostError: Error(Storage, MissingValue)',
+        } as never);
         await expect(
             simulateAndParse(network, op, TreasuryContract.parsers.getRate),
         ).rejects.toMatchObject({
@@ -196,17 +178,15 @@ describe('simulateAndParse', () => {
     });
 
     it('passes the auth mode through to the RPC', async () => {
-        const spy = vi
-            .spyOn(rpc.Server.prototype, 'simulateTransaction')
-            .mockResolvedValue({
-                id: '1',
-                latestLedger: 42,
-                events: [],
-                _parsed: true,
-                transactionData: new SorobanDataBuilder(),
-                minResourceFee: '0',
-                result: { auth: [], xdr: '', retval: nativeToScVal(9n, { type: 'i128' }) },
-            } as never);
+        const spy = vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue({
+            id: '1',
+            latestLedger: 42,
+            events: [],
+            _parsed: true,
+            transactionData: new SorobanDataBuilder(),
+            minResourceFee: '0',
+            result: { auth: [], xdr: '', retval: nativeToScVal(9n, { type: 'i128' }) },
+        } as never);
         await simulateAndParse(network, op, TreasuryContract.parsers.getRate, {
             authMode: 'record_allow_nonroot',
         });

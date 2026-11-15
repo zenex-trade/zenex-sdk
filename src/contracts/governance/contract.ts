@@ -1,5 +1,13 @@
 import { governanceSpec } from '../contract_specs.js';
-import { Address, Contract, contract, xdr, nativeToScVal, scValToNative, Operation } from '@stellar/stellar-sdk';
+import {
+    Address,
+    Contract,
+    contract,
+    xdr,
+    nativeToScVal,
+    scValToNative,
+    Operation,
+} from '@stellar/stellar-sdk';
 import { u32, u64 } from '../../index.js';
 import { Buffer } from 'buffer';
 
@@ -44,8 +52,7 @@ export class GovernanceContract extends Contract {
     /** Decoders for each method's `simulateTransaction` result. Methods that only emit events parse to nothing. */
     static readonly parsers = {
         // Timelock methods
-        queue: (result: string): u32 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        queue: (result: string): u32 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         cancel: () => {},
         execute: () => {},
         // Admin methods
@@ -53,8 +60,7 @@ export class GovernanceContract extends Contract {
         setDelay: () => {},
         applyDelay: () => {},
         // Getters
-        getDelay: (result: string): u64 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        getDelay: (result: string): u64 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         getQueued: (result: string): QueuedCall =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         // Ownable
@@ -75,13 +81,11 @@ export class GovernanceContract extends Contract {
         wasmHash: Buffer | string,
         args: GovernanceConstructorArgs,
         salt?: Buffer,
-        format: 'hex' | 'base64' = 'hex'
+        format: 'hex' | 'base64' = 'hex',
     ): string {
         return Operation.createCustomContract({
             address: Address.fromString(deployer),
-            wasmHash: typeof wasmHash === 'string'
-                ? Buffer.from(wasmHash, format)
-                : wasmHash,
+            wasmHash: typeof wasmHash === 'string' ? Buffer.from(wasmHash, format) : wasmHash,
             salt,
             constructorArgs: [
                 Address.fromString(args.owner).toScVal(),
@@ -114,10 +118,7 @@ export class GovernanceContract extends Contract {
      * cancelled.
      */
     cancel(nonce: u32): string {
-        return this.call(
-            'cancel',
-            xdr.ScVal.scvU32(nonce),
-        ).toXDR('base64');
+        return this.call('cancel', xdr.ScVal.scvU32(nonce)).toXDR('base64');
     }
 
     /**
@@ -128,10 +129,7 @@ export class GovernanceContract extends Contract {
      * `unlock_time`.
      */
     execute(nonce: u32): string {
-        return this.call(
-            'execute',
-            xdr.ScVal.scvU32(nonce),
-        ).toXDR('base64');
+        return this.call('execute', xdr.ScVal.scvU32(nonce)).toXDR('base64');
     }
 
     /**
@@ -156,10 +154,7 @@ export class GovernanceContract extends Contract {
      *   the call reverts with `GovInvalidDelay` (812).
      */
     setDelay(newDelay: bigint): string {
-        return this.call(
-            'set_delay',
-            nativeToScVal(newDelay, { type: 'u64' }),
-        ).toXDR('base64');
+        return this.call('set_delay', nativeToScVal(newDelay, { type: 'u64' })).toXDR('base64');
     }
 
     /**
@@ -226,9 +221,6 @@ export class GovernanceContract extends Contract {
      * the nonce is unknown, already run, or already cancelled.
      */
     getQueued(nonce: u32): string {
-        return this.call(
-            'get_queued',
-            xdr.ScVal.scvU32(nonce),
-        ).toXDR('base64');
+        return this.call('get_queued', xdr.ScVal.scvU32(nonce)).toXDR('base64');
     }
 }

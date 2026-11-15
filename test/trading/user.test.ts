@@ -136,9 +136,7 @@ afterEach(() => {
 
 describe('MarketUser.load', () => {
     it('reads both sides, the counter and claimable credit in one call', async () => {
-        const spy = mockEntries(
-            userEntries(USER, { short: true, counter: 7, credit: 250n }),
-        );
+        const spy = mockEntries(userEntries(USER, { short: true, counter: 7, credit: 250n }));
         const user = await MarketUser.load(network, MARKET, USER);
 
         expect(spy).toHaveBeenCalledTimes(1);
@@ -281,16 +279,14 @@ describe('MarketUser.claimable', () => {
 
 describe('token balance', () => {
     function mockBalanceSim(amount: bigint) {
-        return vi
-            .spyOn(rpc.Server.prototype, 'simulateTransaction')
-            .mockResolvedValue({
-                latestLedger: 4242,
-                transactionData: {},
-                minResourceFee: '1',
-                result: { retval: nativeToScVal(amount, { type: 'i128' }), auth: [] },
-                events: [],
-                _parsed: true,
-            } as never);
+        return vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue({
+            latestLedger: 4242,
+            transactionData: {},
+            minResourceFee: '1',
+            result: { retval: nativeToScVal(amount, { type: 'i128' }), auth: [] },
+            events: [],
+            _parsed: true,
+        } as never);
     }
 
     // The property that matters: ONE path for every holder and every token.
@@ -306,18 +302,14 @@ describe('token balance', () => {
     it('reads a contract holder the same way, with no branch', async () => {
         const vaultHolder = StrKey.encodeContract(Buffer.alloc(32, 21));
         mockBalanceSim(4_248_930_129_558n);
-        expect(await loadTokenBalance(network, TOKEN, vaultHolder)).toBe(
-            4_248_930_129_558n,
-        );
+        expect(await loadTokenBalance(network, TOKEN, vaultHolder)).toBe(4_248_930_129_558n);
     });
 
     it('needs no classic Asset, so a share token works too', async () => {
         // The vault's share token is a pure-Soroban fungible with no
         // code/issuer; `getAssetBalance` could not address it at all.
         mockBalanceSim(4_995_000_000_000_000_000n);
-        expect(await loadTokenBalance(network, VAULT, USER)).toBe(
-            4_995_000_000_000_000_000n,
-        );
+        expect(await loadTokenBalance(network, VAULT, USER)).toBe(4_995_000_000_000_000_000n);
     });
 
     it('reads several tokens for one holder, in request order', async () => {
@@ -327,7 +319,10 @@ describe('token balance', () => {
             async () =>
                 ({
                     latestLedger: 4242,
-                    result: { retval: nativeToScVal(++call === 1 ? 42n : 7n, { type: 'i128' }), auth: [] },
+                    result: {
+                        retval: nativeToScVal(++call === 1 ? 42n : 7n, { type: 'i128' }),
+                        auth: [],
+                    },
                     _parsed: true,
                 }) as never,
         );
@@ -340,9 +335,7 @@ describe('token balance', () => {
             error: 'boom',
             _parsed: true,
         } as never);
-        await expect(loadTokenBalance(network, TOKEN, USER)).rejects.toThrow(
-            /Simulation failed/,
-        );
+        await expect(loadTokenBalance(network, TOKEN, USER)).rejects.toThrow(/Simulation failed/);
     });
 });
 
@@ -356,19 +349,14 @@ describe('loadTreasuryRate', () => {
     });
 
     it('reads an absent Rate key as the contract default of zero', async () => {
-        mockEntries([
-            ledgerEntryFor(contractInstanceLedgerKey(TREASURY), treasuryInstanceScVal()),
-        ]);
+        mockEntries([ledgerEntryFor(contractInstanceLedgerKey(TREASURY), treasuryInstanceScVal())]);
         expect(await loadTreasuryRate(network, TREASURY)).toBe(0n);
     });
 
     it('reads the owner from the same key, with no extra call', async () => {
         const owner = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 4));
         const spy = mockEntries([
-            ledgerEntryFor(
-                contractInstanceLedgerKey(TREASURY),
-                treasuryInstanceScVal(RATE, owner),
-            ),
+            ledgerEntryFor(contractInstanceLedgerKey(TREASURY), treasuryInstanceScVal(RATE, owner)),
         ]);
         const state = await loadTreasuryInstance(network, TREASURY);
         expect(state).toEqual({ rate: RATE, owner });
@@ -403,12 +391,7 @@ describe('archived user entries', () => {
         expect(user.short.notional).toBe(1000n);
         expect(user.orderCounter).toBe(7);
         expect(user.claimableCredit).toBe(250n);
-        expect(user.archived).toEqual([
-            'long',
-            'short',
-            'orderCounter',
-            'claimableCredit',
-        ]);
+        expect(user.archived).toEqual(['long', 'short', 'orderCounter', 'claimableCredit']);
     });
 
     it('lists only the archived rows', async () => {
@@ -459,9 +442,9 @@ describe('archived user entries', () => {
             ...market.slice(1),
             ...userEntries(USER, { counter: 3 }),
         ]);
-        await expect(
-            Market.loadWithUser(network, contracts, USER),
-        ).rejects.toMatchObject({ code: 'MISSING_STATE' });
+        await expect(Market.loadWithUser(network, contracts, USER)).rejects.toMatchObject({
+            code: 'MISSING_STATE',
+        });
     });
 });
 
@@ -530,7 +513,13 @@ describe('MarketUser constructor (one fields object)', () => {
         // `archived` defaults to none.
         expect(user.archived).toEqual([]);
         expect(Object.keys(user).sort()).toEqual([
-            'archived', 'claimableCredit', 'long', 'marketId', 'orderCounter', 'short', 'userId',
+            'archived',
+            'claimableCredit',
+            'long',
+            'marketId',
+            'orderCounter',
+            'short',
+            'userId',
         ]);
     });
 
@@ -553,9 +542,9 @@ describe('MarketUser constructor (one fields object)', () => {
 
     it('rejects the positional arguments it took before 1.0.0', () => {
         const positional = MarketUser as unknown as new (...args: unknown[]) => MarketUser;
-        expect(
-            () => new positional(MARKET, USER, fields.long, fields.short, 7, 5n),
-        ).toThrow(TypeError);
+        expect(() => new positional(MARKET, USER, fields.long, fields.short, 7, 5n)).toThrow(
+            TypeError,
+        );
         expect(() => new positional()).toThrow(/takes one fields object/);
         // @ts-expect-error the fields object is the only argument.
         expect(() => new MarketUser(MARKET, USER)).toThrow(TypeError);

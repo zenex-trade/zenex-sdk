@@ -19,4 +19,3 @@ export type {
     VaultApproveEvent,
     VaultEvent,
 } from './events.js';
-

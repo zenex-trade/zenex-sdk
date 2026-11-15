@@ -23,8 +23,9 @@ export type OwnableContractType =
     | ZenexContractType.Governance;
 
 /** Base shape shared by every ownership event. `C` is the contract that raised it. */
-export interface BaseOwnableEvent<C extends OwnableContractType = OwnableContractType>
-    extends BaseZenexEvent {
+export interface BaseOwnableEvent<
+    C extends OwnableContractType = OwnableContractType,
+> extends BaseZenexEvent {
     /** The contract type that raised the event. */
     contractType: C;
     /** The event name. */
@@ -32,8 +33,9 @@ export interface BaseOwnableEvent<C extends OwnableContractType = OwnableContrac
 }
 
 /** The owner started, refreshed or cancelled a two-step transfer through `transferOwnership`. */
-export interface OwnershipTransferEvent<C extends OwnableContractType = OwnableContractType>
-    extends BaseOwnableEvent<C> {
+export interface OwnershipTransferEvent<
+    C extends OwnableContractType = OwnableContractType,
+> extends BaseOwnableEvent<C> {
     eventType: OwnableEventType.OwnershipTransfer;
     /** The current owner, who stays owner until `newOwner` accepts. */
     oldOwner: string;
@@ -44,16 +46,18 @@ export interface OwnershipTransferEvent<C extends OwnableContractType = OwnableC
 }
 
 /** The pending owner accepted through `acceptOwnership` and is now the owner. */
-export interface OwnershipTransferCompletedEvent<C extends OwnableContractType = OwnableContractType>
-    extends BaseOwnableEvent<C> {
+export interface OwnershipTransferCompletedEvent<
+    C extends OwnableContractType = OwnableContractType,
+> extends BaseOwnableEvent<C> {
     eventType: OwnableEventType.OwnershipTransferCompleted;
     /** The new owner. */
     newOwner: string;
 }
 
 /** The owner renounced ownership through `renounceOwnership`. Every owner-only method is disabled for good. */
-export interface OwnershipRenouncedEvent<C extends OwnableContractType = OwnableContractType>
-    extends BaseOwnableEvent<C> {
+export interface OwnershipRenouncedEvent<
+    C extends OwnableContractType = OwnableContractType,
+> extends BaseOwnableEvent<C> {
     eventType: OwnableEventType.OwnershipRenounced;
     /** The owner that renounced. */
     oldOwner: string;
@@ -61,6 +65,4 @@ export interface OwnershipRenouncedEvent<C extends OwnableContractType = Ownable
 
 /** A decoded ownership event raised by a contract of type `C`. Narrow on `eventType` for the concrete shape. */
 export type OwnableEvent<C extends OwnableContractType = OwnableContractType> =
-    | OwnershipTransferEvent<C>
-    | OwnershipTransferCompletedEvent<C>
-    | OwnershipRenouncedEvent<C>;
+    OwnershipTransferEvent<C> | OwnershipTransferCompletedEvent<C> | OwnershipRenouncedEvent<C>;

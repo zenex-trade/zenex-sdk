@@ -32,17 +32,13 @@ describe('contract-specs: locating a WASM', () => {
             'release.sha256',
         );
         expect(findWasm('market', dir, '')).toBe(join(dir, 'market_v1.0.0.wasm'));
-        expect(findWasm('strategy_vault', dir, '')).toBe(
-            join(dir, 'strategy-vault_v1.0.0.wasm'),
-        );
+        expect(findWasm('strategy_vault', dir, '')).toBe(join(dir, 'strategy-vault_v1.0.0.wasm'));
     });
 
     it('does not take another contract that shares a name prefix', async () => {
         const dir = await directory('market_router_v0.0.2.wasm', 'market_v1.0.0.wasm');
         expect(findWasm('market', dir, '')).toBe(join(dir, 'market_v1.0.0.wasm'));
-        expect(findWasm('market_router', dir, '')).toBe(
-            join(dir, 'market_router_v0.0.2.wasm'),
-        );
+        expect(findWasm('market_router', dir, '')).toBe(join(dir, 'market_router_v0.0.2.wasm'));
     });
 
     it('prefers the plain name over a versioned asset', async () => {
@@ -60,7 +56,11 @@ describe('contract-specs: locating a WASM', () => {
         expect(() => findWasm('factory', dir, 'HINT')).toThrow(
             /no WASM for factory.*factory_v<version>\.wasm.*HINT/,
         );
-        expect(() => findWasm('factory', undefined, 'HINT')).toThrow(/no directory configured.*HINT/);
-        expect(() => findWasm('factory', join(dir, 'absent'), 'HINT')).toThrow(/no directory .*HINT/);
+        expect(() => findWasm('factory', undefined, 'HINT')).toThrow(
+            /no directory configured.*HINT/,
+        );
+        expect(() => findWasm('factory', join(dir, 'absent'), 'HINT')).toThrow(
+            /no directory .*HINT/,
+        );
     });
 });

@@ -5,7 +5,6 @@ import type { AdlState, MarketConfig } from './types.js';
 import { parseAdlState, parseMarketConfig } from './types.js';
 import { Buffer } from 'buffer';
 
-
 /**
  * A market's instance storage, as `parseMarketInstance` decodes it.
  * `MarketData`, positions and orders live in persistent entries outside it.
@@ -40,9 +39,7 @@ export interface MarketInstanceState {
  * @throws {MarketStateError} `MISSING_STATE` unless `Config`, `FeedId`,
  *   `Status`, `Vault`, `Token`, `Oracle` and `Treasury` are all set.
  */
-export function parseMarketInstance(
-    instanceVal: xdr.ScVal,
-): MarketInstanceState {
+export function parseMarketInstance(instanceVal: xdr.ScVal): MarketInstanceState {
     const storage = instanceStorage(instanceVal, 'market');
     const delistedAt = storage.get('DelistedAt');
     const terminalPrice = storage.get('TerminalPrice');
@@ -58,9 +55,7 @@ export function parseMarketInstance(
         treasury: storage.address('Treasury'),
         delistedAt: delistedAt ? scValToBigInt(delistedAt) : undefined,
         terminalPrice: terminalPrice ? scValToBigInt(terminalPrice) : undefined,
-        adl: adl
-            ? parseAdlState(scValToNative(adl))
-            : { long: false, short: false },
+        adl: adl ? parseAdlState(scValToNative(adl)) : { long: false, short: false },
         owner: storage.optionalAddress('Owner'),
     };
 }

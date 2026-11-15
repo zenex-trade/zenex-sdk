@@ -1,14 +1,9 @@
 export { GovernanceContract } from './contract.js';
 
-export type {
-    QueuedCall,
-    GovernanceConstructorArgs,
-} from './contract.js';
+export type { QueuedCall, GovernanceConstructorArgs } from './contract.js';
 
 // Events
-export {
-    GovernanceEventType,
-} from './events.js';
+export { GovernanceEventType } from './events.js';
 
 export type {
     BaseGovernanceEvent,

@@ -42,17 +42,27 @@ describe('contract keys: trading DataKey mirror (market/src/storage.rs)', () => 
         const priceCacheKey = marketPriceCacheLedgerKey(CONTRACT_ID);
         expect(priceCacheKey.contractData().durability().name).toBe('temporary');
         expect(decodeKeyVec(priceCacheKey.contractData().key())).toEqual(['PriceCache']);
-        const contractAddress = Address.fromScAddress(priceCacheKey.contractData().contract()).toString();
+        const contractAddress = Address.fromScAddress(
+            priceCacheKey.contractData().contract(),
+        ).toString();
         expect(contractAddress).toBe(CONTRACT_ID);
     });
 
     it('Position(user, is_long) builds [Symbol("Position"), user, bool] for both sides', () => {
         const longPositionKey = marketPositionLedgerKey(CONTRACT_ID, USER, true);
         expect(longPositionKey.contractData().durability().name).toBe('persistent');
-        expect(decodeKeyVec(longPositionKey.contractData().key())).toEqual(['Position', USER, true]);
+        expect(decodeKeyVec(longPositionKey.contractData().key())).toEqual([
+            'Position',
+            USER,
+            true,
+        ]);
 
         const shortPositionKey = marketPositionLedgerKey(CONTRACT_ID, USER, false);
-        expect(decodeKeyVec(shortPositionKey.contractData().key())).toEqual(['Position', USER, false]);
+        expect(decodeKeyVec(shortPositionKey.contractData().key())).toEqual([
+            'Position',
+            USER,
+            false,
+        ]);
     });
 
     it('VaultOrder(user, id) builds [Symbol("VaultOrder"), user, u32]', () => {
@@ -76,12 +86,17 @@ describe('contract keys: trading DataKey mirror (market/src/storage.rs)', () => 
     it('ClaimableCredit(user) builds [Symbol("ClaimableCredit"), user]', () => {
         const claimableCreditKey = marketClaimableCreditLedgerKey(CONTRACT_ID, USER);
         expect(claimableCreditKey.contractData().durability().name).toBe('persistent');
-        expect(decodeKeyVec(claimableCreditKey.contractData().key())).toEqual(['ClaimableCredit', USER]);
+        expect(decodeKeyVec(claimableCreditKey.contractData().key())).toEqual([
+            'ClaimableCredit',
+            USER,
+        ]);
     });
 
     it('persistent keys target the requested contract', () => {
         const orderKey = marketOrderLedgerKey(CONTRACT_ID, USER, 1);
-        const contractAddress = Address.fromScAddress(orderKey.contractData().contract()).toString();
+        const contractAddress = Address.fromScAddress(
+            orderKey.contractData().contract(),
+        ).toString();
         expect(contractAddress).toBe(CONTRACT_ID);
     });
 
@@ -102,7 +117,7 @@ describe('contract keys: generic helpers', () => {
         const instanceKey = contractInstanceLedgerKey(CONTRACT_ID);
         expect(instanceKey.contractData().durability().name).toBe('persistent');
         expect(instanceKey.contractData().key().switch()).toBe(
-            xdr.ScValType.scvLedgerKeyContractInstance()
+            xdr.ScValType.scvLedgerKeyContractInstance(),
         );
     });
 
@@ -124,7 +139,9 @@ describe('contract keys: vault instance keys (decodeEntryKey vs OZ storage enums
     // own StrategyStorageKey::Strategy.
     it('decodes the OZ VaultStorageKey unit variants', () => {
         expect(decodeEntryKey(unitVariantScVal('AssetAddress'))).toBe('AssetAddress');
-        expect(decodeEntryKey(unitVariantScVal('VirtualDecimalsOffset'))).toBe('VirtualDecimalsOffset');
+        expect(decodeEntryKey(unitVariantScVal('VirtualDecimalsOffset'))).toBe(
+            'VirtualDecimalsOffset',
+        );
     });
 
     it('decodes the OZ FungibleStorageKey unit variants', () => {

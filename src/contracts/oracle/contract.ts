@@ -1,5 +1,13 @@
 import { oracleSpec } from '../contract_specs.js';
-import { Address, Contract, contract, xdr, nativeToScVal, scValToNative, Operation } from '@stellar/stellar-sdk';
+import {
+    Address,
+    Contract,
+    contract,
+    xdr,
+    nativeToScVal,
+    scValToNative,
+    Operation,
+} from '@stellar/stellar-sdk';
 import { u32, u64, i128 } from '../../index.js';
 import { Buffer } from 'buffer';
 
@@ -68,12 +76,9 @@ export class OracleContract extends Contract {
         updateSpreadReductionFactor: () => {},
         upgrade: () => {},
         // Getters
-        verifier: (result: string): string =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        tradeStaleness: (result: string): u64 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        closeStaleness: (result: string): u64 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        verifier: (result: string): string => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        tradeStaleness: (result: string): u64 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        closeStaleness: (result: string): u64 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         spreadReductionFactor: (result: string): i128 =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         // Ownable
@@ -95,13 +100,11 @@ export class OracleContract extends Contract {
         wasmHash: Buffer | string,
         args: OracleConstructorArgs,
         salt?: Buffer,
-        format: 'hex' | 'base64' = 'hex'
+        format: 'hex' | 'base64' = 'hex',
     ): string {
         return Operation.createCustomContract({
             address: Address.fromString(deployer),
-            wasmHash: typeof wasmHash === 'string'
-                ? Buffer.from(wasmHash, format)
-                : wasmHash,
+            wasmHash: typeof wasmHash === 'string' ? Buffer.from(wasmHash, format) : wasmHash,
             salt,
             constructorArgs: [
                 Address.fromString(args.owner).toScVal(),
@@ -189,7 +192,6 @@ export class OracleContract extends Contract {
             nativeToScVal(spreadReductionFactor, { type: 'i128' }),
         ).toXDR('base64');
     }
-
 
     // ============================================================
     // Upgrade

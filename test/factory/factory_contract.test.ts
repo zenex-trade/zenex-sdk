@@ -134,8 +134,14 @@ describe('FactoryContract', () => {
 
     it('deployMarket accepts the feed id as a plain Uint8Array', () => {
         const op = contract.deployMarket(
-            ADMIN, Buffer.alloc(32, 7), TOKEN, ORACLE, Uint8Array.from(FEED_ID),
-            makeConfig(), 'Vault Shares', 'vTKN',
+            ADMIN,
+            Buffer.alloc(32, 7),
+            TOKEN,
+            ORACLE,
+            Uint8Array.from(FEED_ID),
+            makeConfig(),
+            'Vault Shares',
+            'vTKN',
         );
         const { rawArgs } = decodeInvoke(op);
         expect(rawArgs[4].switch().name).toBe('scvBytes');
@@ -144,8 +150,14 @@ describe('FactoryContract', () => {
 
     it('encodes the 34-field config map in alphabetical key order with the right values', () => {
         const op = contract.deployMarket(
-            ADMIN, Buffer.alloc(32, 7), TOKEN, ORACLE, FEED_ID,
-            makeConfig(), 'Vault Shares', 'vTKN',
+            ADMIN,
+            Buffer.alloc(32, 7),
+            TOKEN,
+            ORACLE,
+            FEED_ID,
+            makeConfig(),
+            'Vault Shares',
+            'vTKN',
         );
         const { rawArgs } = decodeInvoke(op);
 
@@ -163,7 +175,8 @@ describe('FactoryContract', () => {
         // The two u64 duration fields encode as scvU64, everything else as i128.
         for (const entry of configMap!) {
             const key = entry.key().sym().toString();
-            const expectedType = key === 'notional_lock' || key === 'redeem_lock' ? 'scvU64' : 'scvI128';
+            const expectedType =
+                key === 'notional_lock' || key === 'redeem_lock' ? 'scvU64' : 'scvI128';
             expect(entry.val().switch().name, `config field ${key}`).toBe(expectedType);
         }
     });
@@ -183,7 +196,9 @@ describe('FactoryContract', () => {
         const { fn, args } = decodeInvoke(op);
         expect(fn).toBe('is_deployed');
         expect(args).toEqual([TRADING]);
-        expect(FactoryContract.parsers.isDeployed(xdr.ScVal.scvBool(true).toXDR('base64'))).toBe(true);
+        expect(FactoryContract.parsers.isDeployed(xdr.ScVal.scvBool(true).toXDR('base64'))).toBe(
+            true,
+        );
     });
 
     it('static deploy builds __constructor with owner then init_meta, map keys in alphabetical order', () => {
@@ -197,7 +212,11 @@ describe('FactoryContract', () => {
         };
         const op = FactoryContract.deploy(ADMIN, Buffer.alloc(32, 9), args, undefined, 'hex');
         const decoded = xdr.Operation.fromXDR(op, 'base64');
-        const createContract = decoded.body().invokeHostFunctionOp().hostFunction().createContractV2();
+        const createContract = decoded
+            .body()
+            .invokeHostFunctionOp()
+            .hostFunction()
+            .createContractV2();
         const ctorArgs = createContract.constructorArgs();
         expect(ctorArgs).toHaveLength(2);
         expect(scValToNative(ctorArgs[0])).toBe(ADMIN);
@@ -245,6 +264,8 @@ describe('FactoryContract', () => {
         expect(transfer.args).toEqual([ADMIN, 1234]);
         expect(decodeInvoke(contract.acceptOwnership()).fn).toBe('accept_ownership');
         expect(decodeInvoke(contract.renounceOwnership()).fn).toBe('renounce_ownership');
-        expect(FactoryContract.parsers.getOwner(xdr.ScVal.scvVoid().toXDR('base64'))).toBeUndefined();
+        expect(
+            FactoryContract.parsers.getOwner(xdr.ScVal.scvVoid().toXDR('base64')),
+        ).toBeUndefined();
     });
 });
