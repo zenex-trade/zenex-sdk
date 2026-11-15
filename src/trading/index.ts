@@ -12,7 +12,7 @@ export { MarketPosition } from './position.js';
 export {
     OrderIntent,
     DEFAULT_ORDER_TTL_LEDGERS,
-    DEFAULT_TRIGGER_ORDER_TTL_LEDGERS,
+    NO_EXPIRY_LEDGER,
     maxMarginForBalance,
     previewOrder,
     isDecreaseOrderKind,

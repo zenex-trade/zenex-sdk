@@ -126,7 +126,7 @@ An order's lifetime depends on its kind:
 | Kinds | Constructor argument | Default |
 |---|---|---|
 | Market: `openMarket`, `closePosition`, `decrease`, `addMargin`, `withdrawMargin` | `ttlLedgers` (4th) | 60 ledgers, about 5 minutes |
-| Trigger: `openLimit`, `openStop`, `takeProfit`, `stopLoss` | `triggerTtlLedgers` (6th) | 518,400 ledgers, about 30 days |
+| Trigger: `openLimit`, `openStop`, `takeProfit`, `stopLoss` | `triggerTtlLedgers` (6th) | never expires (`NO_EXPIRY_LEDGER`) |
 
 The contract accepts any expiration at or after the current ledger, and an
 order fills through its expiration ledger. An expired order never fills, and

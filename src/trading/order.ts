@@ -46,17 +46,16 @@ export {
 export const DEFAULT_ORDER_TTL_LEDGERS = 60;
 
 /**
- * Default lifetime of a trigger order (limit and stop opens, take-profit,
- * stop-loss), in ledgers: about 30 days at the contract's own 17,280
- * ledgers per day. A trigger order rests until the price crosses it, so it
- * needs a lifetime measured in days, not minutes.
+ * The `expiration` of an order that never expires: the largest `u32` ledger
+ * sequence. A trigger order (limit and stop opens, take-profit, stop-loss)
+ * rests until the price crosses it or the owner cancels it, so it does not
+ * expire by default.
  *
  * The contract bounds `expiration` only from below: creation rejects one
  * behind the current ledger (`OrderExpired`, 731), an order fills through
- * its `expiration` ledger inclusive, and any later `u32` is accepted. Pass
- * a larger `triggerTtlLedgers` for a longer-lived order.
+ * its `expiration` ledger inclusive, and any later `u32` is accepted.
  */
-export const DEFAULT_TRIGGER_ORDER_TTL_LEDGERS = 518_400;
+export const NO_EXPIRY_LEDGER = 0xffff_ffff;
 
 /**
  * Order factory bound to one ticket's context: a market snapshot, an owner,
@@ -70,9 +69,9 @@ export const DEFAULT_TRIGGER_ORDER_TTL_LEDGERS = 518_400;
  * fills at. The lifetime depends on the kind: market orders (`openMarket`,
  * `closePosition`, `decrease`, `addMargin`, `withdrawMargin`) live
  * `ttlLedgers`, 60 by default, and trigger orders (`openLimit`, `openStop`,
- * `takeProfit`, `stopLoss`) live `triggerTtlLedgers`, 518,400 by default
- * (about 30 days). An expired order no longer fills and its escrow stays in
- * the market until the order is cancelled.
+ * `takeProfit`, `stopLoss`) never expire unless `triggerTtlLedgers` is set.
+ * An expired order no longer fills and its escrow stays in the market until
+ * the order is cancelled.
  * The methods also encode the contract's conventions that `OrderKind` alone
  * does not express: the `FULL_CLOSE` sentinel, margin-only orders as
  * `notional: 0n`, and the trigger-direction rules for entries and TP/SL.
@@ -92,11 +91,11 @@ export class OrderIntent {
         /**
          * Lifetime of a trigger order in ledgers
          * (`expiration = market.ledger + triggerTtlLedgers`): limit and stop
-         * opens, take-profit and stop-loss. Defaults to
-         * {@link DEFAULT_TRIGGER_ORDER_TTL_LEDGERS}, 518,400 (about 30 days).
-         * `ttlLedgers` does not apply to these kinds.
+         * opens, take-profit and stop-loss. Left out, a trigger order never
+         * expires: its `expiration` is {@link NO_EXPIRY_LEDGER}. `ttlLedgers`
+         * does not apply to these kinds.
          */
-        public triggerTtlLedgers: number = DEFAULT_TRIGGER_ORDER_TTL_LEDGERS,
+        public triggerTtlLedgers?: number,
     ) {}
 
     private base(
@@ -110,9 +109,13 @@ export class OrderIntent {
         };
     }
 
-    /** The base of a trigger order: as `base`, with the trigger lifetime. */
+    /** The base of a trigger order: as `base`, with the trigger lifetime, or no expiry without one. */
     private triggerBase(): ReturnType<OrderIntent['base']> {
-        return this.base(this.triggerTtlLedgers);
+        if (this.triggerTtlLedgers === undefined) {
+            return { ...this.base(), expiration: NO_EXPIRY_LEDGER };
+        }
+        const base = this.base(this.triggerTtlLedgers);
+        return { ...base, expiration: Math.min(base.expiration, NO_EXPIRY_LEDGER) };
     }
 
     /** @throws {RangeError} when a slippage bound is configured but no price was given to measure it against. */

@@ -23,7 +23,7 @@ import {
 
 import {
     DEFAULT_ORDER_TTL_LEDGERS,
-    DEFAULT_TRIGGER_ORDER_TTL_LEDGERS,
+    NO_EXPIRY_LEDGER,
     OrderIntent,
     previewOrder,
 } from '../../src/trading/order.js';
@@ -182,10 +182,10 @@ describe('OrderIntent', () => {
             expect(intent.withdrawMargin(1n).expiration).toBe(expiration);
         });
 
-        it('gives trigger kinds the long default, about 30 days', () => {
-            // 30 days at the contract's 17,280 ledgers per day.
-            expect(DEFAULT_TRIGGER_ORDER_TTL_LEDGERS).toBe(30 * 17_280);
-            const expiration = market.ledger + 518_400;
+        it('never expires a trigger kind by default', () => {
+            // The contract takes a u32 ledger sequence and bounds it only from below.
+            expect(NO_EXPIRY_LEDGER).toBe(4_294_967_295);
+            const expiration = NO_EXPIRY_LEDGER;
             expect(intent.stopLoss(trigger).expiration).toBe(expiration);
             expect(intent.takeProfit(trigger).expiration).toBe(expiration);
             expect(intent.openLimit({ ...sized, ...trigger }).expiration).toBe(expiration);
@@ -196,9 +196,12 @@ describe('OrderIntent', () => {
             const custom = new OrderIntent(market, USER, true, 10, 0n, 1_000);
             expect(custom.openMarket(sized).expiration).toBe(market.ledger + 10);
             expect(custom.stopLoss(trigger).expiration).toBe(market.ledger + 1_000);
-            // A market lifetime alone leaves trigger orders on their default.
+            // A market lifetime alone leaves trigger orders without an expiry.
             const short = new OrderIntent(market, USER, true, 10);
-            expect(short.takeProfit(trigger).expiration).toBe(market.ledger + 518_400);
+            expect(short.takeProfit(trigger).expiration).toBe(NO_EXPIRY_LEDGER);
+            // A trigger lifetime past the u32 ceiling lands on the ceiling.
+            const long = new OrderIntent(market, USER, true, 10, 0n, NO_EXPIRY_LEDGER);
+            expect(long.stopLoss(trigger).expiration).toBe(NO_EXPIRY_LEDGER);
         });
 
         it('stays inside the contract u32 expiration at a mainnet-scale ledger', () => {
