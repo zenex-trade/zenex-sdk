@@ -62,6 +62,35 @@ export interface MarketContracts {
     treasury?: string;
 }
 
+/**
+ * {@link MarketData} as a snapshot holds it: the per-side pairs are readonly
+ * too. A plain `MarketData` is assignable to it.
+ */
+export type ReadonlyMarketData = {
+    readonly [K in keyof MarketData]: Readonly<MarketData[K]>;
+};
+
+/** A frozen shallow copy, or the object itself when it is frozen already. */
+function frozen<T extends object>(value: T): Readonly<T> {
+    return Object.isFrozen(value) ? value : Object.freeze({ ...value });
+}
+
+/** Frozen market data, pairs included. Data that is frozen already is shared, not copied. */
+function frozenData(data: MarketData | ReadonlyMarketData): ReadonlyMarketData {
+    const pairs = Object.values(data).filter(
+        (value) => typeof value === 'object' && value !== null,
+    );
+    if (Object.isFrozen(data) && pairs.every((pair) => Object.isFrozen(pair))) {
+        return data;
+    }
+    const copy: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+        copy[key] =
+            typeof value === 'object' && value !== null ? frozen(value) : value;
+    }
+    return Object.freeze(copy) as unknown as ReadonlyMarketData;
+}
+
 function zero(value: bigint): bigint {
     return value > 0n ? value : 0n;
 }
@@ -92,11 +121,11 @@ export interface MarketFields {
     /** Operational status; only `Active` admits new risk. */
     readonly status: Status;
     /** Global trading parameters. */
-    readonly config: MarketConfig;
+    readonly config: Readonly<MarketConfig>;
     /** The market singleton: open interest, indices, funding. */
-    readonly data: MarketData;
+    readonly data: ReadonlyMarketData;
     /** Per-side ADL flags; a flagged side is closed-only. */
-    readonly adl: AdlState;
+    readonly adl: Readonly<AdlState>;
     /**
      * Flat settlement price of a wound-down market (18-dec), or
      * `undefined`. Once set, the chain fills, liquidates, accrues and
@@ -139,7 +168,8 @@ export interface MarketFields {
 /**
  * One loaded market: instance config, the market singleton, the vault state
  * it settles against, and the oracle and treasury settings it prices and
- * splits fees with. Plain readonly fields, one immutable snapshot per load.
+ * splits fees with. Plain readonly fields, one immutable snapshot per load:
+ * the nested `config`, `data` and `adl` are frozen copies.
  * It holds no network: reads take one explicitly
  * (`MarketUser.load(network, market.id, user)`).
  */
@@ -163,11 +193,11 @@ export class Market implements MarketFields {
     /** Operational status; only `Active` admits new risk. */
     readonly status: Status;
     /** Global trading parameters. */
-    readonly config: MarketConfig;
+    readonly config: Readonly<MarketConfig>;
     /** The market singleton: open interest, indices, funding. */
-    readonly data: MarketData;
+    readonly data: ReadonlyMarketData;
     /** Per-side ADL flags; a flagged side is closed-only. */
-    readonly adl: AdlState;
+    readonly adl: Readonly<AdlState>;
     /**
      * Flat settlement price of a wound-down market (18-dec), or
      * `undefined`. Once set, the chain fills, liquidates, accrues and
@@ -207,7 +237,10 @@ export class Market implements MarketFields {
 
     /**
      * Build a snapshot from its fields. `treasuryRate` is required;
-     * `spreadReductionFactor` defaults to `0n`.
+     * `spreadReductionFactor` defaults to `0n`. `config`, `data`, `adl` and
+     * `feedId` are copied, and the first three are frozen: a write to one of
+     * their fields throws in strict mode, and the caller's own objects stay
+     * writable and detached from the snapshot.
      * @throws {TypeError} if called without a fields object, such as with
      *   the positional arguments it took before 1.0.0.
      */
@@ -231,11 +264,17 @@ export class Market implements MarketFields {
         this.oracle = fields.oracle;
         this.treasury = fields.treasury;
         this.owner = fields.owner;
-        this.feedId = fields.feedId;
+        // The snapshot owns its nested state: frozen copies of the config,
+        // the data and the ADL flags, and its own copy of the feed id bytes
+        // (a buffer cannot be frozen). A later write to the caller's
+        // objects, or to another snapshot derived from this one, cannot
+        // change what this snapshot quotes. Derived snapshots share the
+        // frozen objects.
+        this.feedId = Buffer.from(fields.feedId);
         this.status = fields.status;
-        this.config = fields.config;
-        this.data = fields.data;
-        this.adl = fields.adl;
+        this.config = frozen(fields.config);
+        this.data = frozenData(fields.data);
+        this.adl = frozen(fields.adl);
         this.terminalPrice = fields.terminalPrice;
         this.delistedAt = fields.delistedAt;
         this.vaultAssets = fields.vaultAssets;

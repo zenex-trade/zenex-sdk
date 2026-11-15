@@ -76,6 +76,8 @@ network. To build one by hand, for a test or from indexed state, pass its
 fields as one object: `new Market({ id, ledger, config, data, treasuryRate,
 ... })`. `treasuryRate` is required, because a rate of 0 overstates a redeem
 quote. Derive a changed copy by spreading: `new Market({ ...market, status })`.
+The nested `config`, `data` and `adl` are frozen copies, so a write to one of
+their fields throws, and the objects you passed in stay yours.
 
 A `MarketUser` holds both positions (`user.long`, `user.short`), the order
 counter, and claimable credit. After about 120 idle days a user's entries

@@ -6,6 +6,7 @@ import { contractInstanceLedgerKey } from '../../src/contracts/keys.js';
 import { marketDataLedgerKey } from '../../src/contracts/market/keys.js';
 import { tokenBalanceLedgerKey } from '../../src/token.js';
 import { Status } from '../../src/contracts/market/types.js';
+import type { MarketConfig, MarketData } from '../../src/contracts/market/types.js';
 import type { Network } from '../../src/index.js';
 import {
     contractInstance,
@@ -420,6 +421,45 @@ describe('Market constructor (one fields object)', () => {
         expect(market.status).toBe(Status.Active);
         expect(frozen.data).toBe(market.data);
         expect(frozen).toBeInstanceOf(Market);
+    });
+
+    it('owns its nested state: neither the fields passed in nor a derived snapshot can change it', () => {
+        const source = fixtureMarket().data;
+        const mutable = {
+            ...fields,
+            feedId: Buffer.from(TEST_FEED_ID),
+            config: makeConfig(),
+            data: { ...source, notional: { ...source.notional } } as MarketData,
+            adl: { long: false, short: false },
+        };
+        const market = new Market(mutable);
+        const capacity = market.openCapacity(true, px(100));
+
+        // The caller's own objects stay writable and are detached.
+        mutable.config.maxUtilOpen /= 2n;
+        mutable.data.notional.long += 1n;
+        mutable.adl.long = !mutable.adl.long;
+        mutable.feedId[0] ^= 0xff;
+        expect(market.config.maxUtilOpen).toBe(mutable.config.maxUtilOpen * 2n);
+        expect(market.data.notional.long).toBe(mutable.data.notional.long - 1n);
+        expect(market.adl.long).toBe(!mutable.adl.long);
+        expect(market.feedId[0]).toBe(mutable.feedId[0] ^ 0xff);
+
+        // A derived snapshot shares the frozen state, and a write through
+        // it throws instead of reaching the original.
+        const rated = market.withTreasuryRate(1n);
+        const writable = rated as unknown as {
+            config: MarketConfig;
+            data: MarketData;
+            adl: { long: boolean };
+        };
+        expect(() => { writable.config.maxUtilOpen /= 2n; }).toThrow(TypeError);
+        expect(() => { writable.data.creditPool = 1n; }).toThrow(TypeError);
+        expect(() => { writable.data.notional.long = 1n; }).toThrow(TypeError);
+        expect(() => { writable.adl.long = true; }).toThrow(TypeError);
+        rated.feedId[0] ^= 0xff;
+        expect(market.feedId[0]).toBe(rated.feedId[0] ^ 0xff);
+        expect(market.openCapacity(true, px(100))).toBe(capacity);
     });
 
     it('declares its fields readonly', () => {
