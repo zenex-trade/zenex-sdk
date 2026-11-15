@@ -270,6 +270,7 @@ export {
     parseResult,
 } from './response_parser.js';
 export { parseContractErrorCode, VerifierErrorCode } from './errors.js';
+export { inferErrorSource } from './error_source.js';
 export type { ZenexErrorSource } from './errors.js';
 
 // =============================================================================

@@ -28,9 +28,11 @@ const SIMULATION_SEQUENCE = '123';
  *   whose `require_auth` sits below the root invocation, such as a router
  *   batch that creates an order, fails with `Error(Auth, InvalidAction)`.
  *   Pass `{ authMode: 'record_allow_nonroot' }` for such a call.
- *   `errorSource` says which contract a failure code in 2-13 came from,
- *   `'token'` or `'verifier'` (see `zenexErrorFromCode`); without it such a
- *   code throws an `ambiguous` error that states both meanings.
+ *   `errorSource` overrides which contract a failure code in 2-13 is read
+ *   for, `'token'` or `'verifier'` (see `zenexErrorFromCode`). Without it
+ *   the failed simulation's own events decide, as `parseError` describes,
+ *   and the error is `ambiguous` only when they do not show the failing
+ *   call.
  * @returns The parsed result and the ledger sequence the simulation ran
  *   against.
  * @throws {ZenexError} `InvokeHostFunctionEntryArchived` (-4) when the

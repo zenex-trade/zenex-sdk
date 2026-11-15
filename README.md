@@ -392,22 +392,44 @@ not reported.
 **Codes 2-13 have two meanings.** The token and the price verifier both use
 them, and the oracle passes the verifier's code through unchanged: 10 is an
 insufficient balance from the token and a deactivated signing config from the
-verifier. Say which one you expect, and the error reads accordingly:
+verifier.
+
+On a failed simulation, `parseError` and `simulateAndParse` decide which one
+it is from the simulation itself. Its diagnostic events name the contract
+that raised the error and the call it was raised in: the verifier's `verify`,
+or a token function such as `transfer`. This also holds for a call that does
+both, such as `createAndFill` or a fee forwarder relay, where no caller-side
+guess would be right:
 
 ```ts
+const simulation = await server.simulateTransaction(tx);
+if (rpc.Api.isSimulationError(simulation)) {
+    const error = parseError(simulation);
+    error.source; // 'token' or 'verifier' for a code in 2-13
+    error.codeName; // 'BalanceError', or 'VerifierDigestInactive'
+}
+```
+
+The number alone never decides. When the events do not show the failing
+call, the error is marked `ambiguous`: `codeName` joins both names
+(`OverflowError|VerifierBadVerification`) and the message states both
+meanings. `error.code` still equals the token member of `ZenexErrorCode`, so
+check `error.ambiguous` or `error.source` before acting on a code in that
+range. That is the case for a bare code, and for an error text with no event
+log: the RPC's simulation error string carries none, so keep the response and
+not only its `error` text.
+
+You can also say which one you expect, and a hint overrides the events:
+
+```ts
+import { inferErrorSource, parseError } from '@zenex-trade/zenex-sdk';
 import { zenexErrorFromCode } from '@zenex-trade/zenex-sdk/errors';
 
 zenexErrorFromCode(12, 'verifier').codeName; // 'VerifierBadVerification'
 zenexErrorFromCode(12, 'token').codeName; // 'OverflowError'
-parseError(simulation, 'verifier'); // the same hint for a response
+parseError(simulation, 'verifier'); // the hint wins
+inferErrorSource(text); // from a text that includes the host's event log, as the CLI prints
 ```
-
-Without a hint the error is marked `ambiguous`: `codeName` joins both names
-(`OverflowError|VerifierBadVerification`) and the message states both
-meanings. `error.code` still equals the token member of `ZenexErrorCode`, so
-check `error.ambiguous` or `error.source` before acting on a code in that
-range. A call that both moves tokens and verifies a report, such as
-`createAndFill`, can raise either.
 
 `ZenexError` and `MarketStateError` are each defined once per build, so
 `instanceof` does not hold across the ESM and CommonJS builds: compare

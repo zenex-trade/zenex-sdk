@@ -189,6 +189,7 @@ describe('package root exports', () => {
         expect(SDK.ZenexErrorCode.QuoteOverflow).toBe(-1002);
         expect(SDK.zenexErrorFromCode).toBeTypeOf('function');
         expect(SDK.parseContractErrorCode).toBeTypeOf('function');
+        expect(SDK.inferErrorSource).toBeTypeOf('function');
         expect(SDK.parseError).toBeTypeOf('function');
         expect(SDK.parseResult).toBeTypeOf('function');
     });

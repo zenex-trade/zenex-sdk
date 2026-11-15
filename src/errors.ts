@@ -809,7 +809,9 @@ export class ZenexError extends Error {
  *   failing call moved tokens, `'verifier'` when it verified a price report.
  *   Without it a code in that range resolves to an `ambiguous` error whose
  *   `codeName` and message state both meanings. Ignored outside 2-13, where
- *   every code has one meaning.
+ *   every code has one meaning. `parseError` finds the source in a failed
+ *   simulation's events, and `inferErrorSource` (a root export) in an event
+ *   log text.
  * @returns The error for the code, or `UnknownError` for a code no contract
  *   defines.
  */
