@@ -16,17 +16,13 @@ export interface OracleInstanceState {
 }
 
 /** Parse the oracle's on-chain config. Throws if the verifier, either staleness window, or the spread factor is missing. */
-export function parseOracleInstance(
-    instanceVal: xdr.ScVal,
-): OracleInstanceState {
+export function parseOracleInstance(instanceVal: xdr.ScVal): OracleInstanceState {
     const storage = instanceStorage(instanceVal, 'oracle');
     return {
         verifier: storage.address('Verifier'),
         tradeStaleness: BigInt(scValToNative(storage.require('TradeStaleness'))),
         closeStaleness: BigInt(scValToNative(storage.require('CloseStaleness'))),
-        spreadReductionFactor: scValToBigInt(
-            storage.require('SpreadReductionFactor'),
-        ),
+        spreadReductionFactor: scValToBigInt(storage.require('SpreadReductionFactor')),
         owner: storage.optionalAddress('Owner'),
     };
 }

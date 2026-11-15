@@ -18,22 +18,57 @@ function simulationError(code: number): rpc.Api.SimulateTransactionErrorResponse
     } as unknown as rpc.Api.SimulateTransactionErrorResponse;
 }
 
-describe('parseError: collision-hint machinery is gone', () => {
-    it('parseError takes a single parameter (no contractType hint)', () => {
-        expect(parseError.length).toBe(1);
+describe('parseError: the source hint decides only the shared range', () => {
+    it('a hint is inert outside codes 2-13', () => {
+        expect(parseError(simulationError(770), 'verifier').code).toBe(
+            ZenexErrorCode.AdlNotTriggered,
+        );
+        expect(parseError(simulationError(810), 'token').code).toBe(ZenexErrorCode.GovNotQueued);
+        expect(parseError(simulationError(770), 'verifier').source).toBeUndefined();
     });
 
-    it('a stray second argument is inert (same resolution with and without it)', () => {
-        const parseWithExtraArgument = parseError as unknown as (
+    it('an unknown hint value resolves as no hint', () => {
+        const parseWithAnyHint = parseError as unknown as (
             response: unknown,
-            legacyHint?: string
+            hint?: string,
         ) => ZenexError;
-        expect(parseWithExtraArgument(simulationError(770), 'governance').code).toBe(
-            ZenexErrorCode.AdlNotTriggered
+        expect(parseWithAnyHint(simulationError(770), 'governance').code).toBe(
+            ZenexErrorCode.AdlNotTriggered,
         );
-        expect(parseWithExtraArgument(simulationError(810), 'market').code).toBe(
-            ZenexErrorCode.GovNotQueued
-        );
+        expect(parseWithAnyHint(simulationError(12), 'governance').ambiguous).toBe(true);
+    });
+
+    it('a rejected price report reads as the verifier error with the hint', () => {
+        const error = parseError(simulationError(12), 'verifier');
+        expect(error.code).toBe(12);
+        expect(error.source).toBe('verifier');
+        expect(error.ambiguous).toBe(false);
+        expect(error.codeName).toBe('VerifierBadVerification');
+        expect(error.message).toBe('Price report signatures failed verification');
+    });
+
+    it('the same code reads as the token error with the token hint', () => {
+        const error = parseError(simulationError(10), 'token');
+        expect(error.code).toBe(ZenexErrorCode.BalanceError);
+        expect(error.source).toBe('token');
+        expect(error.codeName).toBe('BalanceError');
+        expect(error.message).toBe('Insufficient token balance');
+    });
+
+    it('without a hint a shared code states both meanings', () => {
+        const error = parseError(simulationError(10));
+        expect(error.code).toBe(10);
+        expect(error.ambiguous).toBe(true);
+        expect(error.source).toBeUndefined();
+        expect(error.codeName).toBe('BalanceError|VerifierDigestInactive');
+        expect(error.message).toContain('Insufficient token balance');
+        expect(error.message).toContain('deactivated verifier config');
+    });
+
+    it('verifier codes 14-18 resolve without a hint', () => {
+        const error = parseError(simulationError(14));
+        expect(error.code).toBe(ZenexErrorCode.VerifierIncorrectSignatureCount);
+        expect(error.ambiguous).toBe(false);
     });
 });
 
@@ -89,8 +124,12 @@ describe('parseError: periphery namespaces resolve unhinted', () => {
     it('strategy-vault 800-803', () => {
         expect(parseError(simulationError(800)).code).toBe(ZenexErrorCode.StrategyInvalidAmount);
         expect(parseError(simulationError(801)).code).toBe(ZenexErrorCode.StrategyPnlExceedsAssets);
-        expect(parseError(simulationError(802)).code).toBe(ZenexErrorCode.StrategySupplyLimitExceeded);
-        expect(parseError(simulationError(803)).code).toBe(ZenexErrorCode.StrategyPayoutExceedsAssets);
+        expect(parseError(simulationError(802)).code).toBe(
+            ZenexErrorCode.StrategySupplyLimitExceeded,
+        );
+        expect(parseError(simulationError(803)).code).toBe(
+            ZenexErrorCode.StrategyPayoutExceedsAssets,
+        );
     });
 
     it('oracle feed/clock pair 790/793 (no longer strategy-vault codes)', () => {
@@ -101,11 +140,11 @@ describe('parseError: periphery namespaces resolve unhinted', () => {
     it('oracle Chainlink report rejects 784/785; the Lazer parser range is retired', () => {
         expect(parseError(simulationError(784)).code).toBe(ZenexErrorCode.OracleReportExpired);
         expect(parseError(simulationError(785)).code).toBe(
-            ZenexErrorCode.OracleInvalidSpreadReduction
+            ZenexErrorCode.OracleInvalidSpreadReduction,
         );
         for (const code of [786, 787, 788, 789, 791, 792]) {
             expect(parseError(simulationError(code)).code, `code ${code}`).toBe(
-                ZenexErrorCode.UnknownError
+                ZenexErrorCode.UnknownError,
             );
         }
     });

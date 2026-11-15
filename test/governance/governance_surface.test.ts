@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { xdr, nativeToScVal, scValToNative, Address, StrKey } from '@stellar/stellar-sdk';
 import { GovernanceContract } from '../../src/contracts/governance/contract.js';
-import { decodeGovernanceEvent, GovernanceEventType } from '../../src/contracts/governance/events.js';
-import { NormalizedEvent } from '../../src/base_event.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 1));
 const OWNER = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 2));
@@ -17,21 +15,19 @@ function decodeInvoke(op: string) {
     };
 }
 
-function normalized(eventType: string, topicArgs: unknown[], data: Record<string, unknown>): NormalizedEvent {
-    return {
-        contractId: CONTRACT_ID, txHash: 't', ledger: 1,
-        ledgerClosedAt: '2026-07-06T00:00:00Z', id: 'e-1',
-        eventType, topicArgs, data,
-    };
-}
-
 describe('GovernanceContract surface', () => {
     const gov = new GovernanceContract(CONTRACT_ID);
 
     it('deploy builds the constructor op', () => {
-        const op = GovernanceContract.deploy(OWNER, Buffer.alloc(32, 9), { owner: OWNER, delay: 3600n });
-        const create = xdr.Operation.fromXDR(op, 'base64').body()
-            .invokeHostFunctionOp().hostFunction().createContractV2();
+        const op = GovernanceContract.deploy(OWNER, Buffer.alloc(32, 9), {
+            owner: OWNER,
+            delay: 3600n,
+        });
+        const create = xdr.Operation.fromXDR(op, 'base64')
+            .body()
+            .invokeHostFunctionOp()
+            .hostFunction()
+            .createContractV2();
         expect(scValToNative(create.constructorArgs()[0])).toBe(OWNER);
         expect(scValToNative(create.constructorArgs()[1])).toBe(3600n);
     });
@@ -58,7 +54,10 @@ describe('GovernanceContract surface', () => {
     it('builds ownable ops (string and Address forms)', () => {
         expect(decodeInvoke(gov.getOwner()).fn).toBe('get_owner');
         expect(decodeInvoke(gov.transferOwnership(OWNER, 100)).args).toEqual([OWNER, 100]);
-        expect(decodeInvoke(gov.transferOwnership(Address.fromString(OWNER), 100)).args).toEqual([OWNER, 100]);
+        expect(decodeInvoke(gov.transferOwnership(Address.fromString(OWNER), 100)).args).toEqual([
+            OWNER,
+            100,
+        ]);
         expect(decodeInvoke(gov.acceptOwnership()).fn).toBe('accept_ownership');
         expect(decodeInvoke(gov.renounceOwnership()).fn).toBe('renounce_ownership');
     });
@@ -79,9 +78,18 @@ describe('GovernanceContract surface', () => {
 
         const queued = xdr.ScVal.scvMap([
             new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('args'), val: xdr.ScVal.scvVec([]) }),
-            new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('fn_name'), val: xdr.ScVal.scvSymbol('set_rate') }),
-            new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('target'), val: Address.fromString(TARGET).toScVal() }),
-            new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('unlock_time'), val: nativeToScVal(99n, { type: 'u64' }) }),
+            new xdr.ScMapEntry({
+                key: xdr.ScVal.scvSymbol('fn_name'),
+                val: xdr.ScVal.scvSymbol('set_rate'),
+            }),
+            new xdr.ScMapEntry({
+                key: xdr.ScVal.scvSymbol('target'),
+                val: Address.fromString(TARGET).toScVal(),
+            }),
+            new xdr.ScMapEntry({
+                key: xdr.ScVal.scvSymbol('unlock_time'),
+                val: nativeToScVal(99n, { type: 'u64' }),
+            }),
         ]).toXDR('base64');
         const qc = p.getQueued(queued);
         expect(qc.target).toBe(TARGET);

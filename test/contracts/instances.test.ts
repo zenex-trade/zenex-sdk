@@ -1,18 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { Address, StrKey, xdr, nativeToScVal } from '@stellar/stellar-sdk';
 import { instanceStorage } from '../../src/contracts/instance.js';
-import {
-    parseTreasuryInstance,
-    parseTreasuryRate,
-} from '../../src/contracts/treasury/instance.js';
+import { parseTreasuryInstance, parseTreasuryRate } from '../../src/contracts/treasury/instance.js';
 import { parseOracleInstance } from '../../src/contracts/oracle/instance.js';
 import { parseFactoryInstance } from '../../src/contracts/factory/instance.js';
 import { parseGovernanceInstance } from '../../src/contracts/governance/instance.js';
-import {
-    contractInstance,
-    treasuryInstanceScVal,
-    unitKey,
-} from '../helpers/market_state.js';
+import { contractInstance, treasuryInstanceScVal, unitKey } from '../helpers/market_state.js';
 
 const OWNER = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 4));
 const VERIFIER = StrKey.encodeContract(Buffer.alloc(32, 5));
@@ -33,9 +26,7 @@ describe('instanceStorage', () => {
     });
 
     it('rejects a value that is not a contract instance', () => {
-        expect(() => instanceStorage(xdr.ScVal.scvU32(1), 'test')).toThrow(
-            /contract-instance/,
-        );
+        expect(() => instanceStorage(xdr.ScVal.scvU32(1), 'test')).toThrow(/contract-instance/);
     });
 
     it('ignores a key shape it does not understand rather than failing the read', () => {
@@ -57,10 +48,21 @@ describe('instanceStorage', () => {
     });
 
     it('names the contract in a missing-key error, so call sites need not', () => {
-        expect(() => instanceStorage(contractInstance([]), 'oracle').require('Verifier'))
-            .toThrow('oracle instance is missing Verifier');
-        expect(() => instanceStorage(contractInstance([]), 'oracle').address('Verifier'))
-            .toThrow('oracle instance is missing Verifier');
+        expect(() => instanceStorage(contractInstance([]), 'oracle').require('Verifier')).toThrow(
+            'oracle instance is missing Verifier',
+        );
+        expect(() => instanceStorage(contractInstance([]), 'oracle').address('Verifier')).toThrow(
+            'oracle instance is missing Verifier',
+        );
+    });
+
+    it('throws the typed state error, so a load fails closed with MISSING_STATE', () => {
+        expect(() => instanceStorage(contractInstance([]), 'oracle').require('Verifier')).toThrow(
+            expect.objectContaining({ name: 'MarketStateError', code: 'MISSING_STATE' }),
+        );
+        expect(() => instanceStorage(xdr.ScVal.scvU32(1), 'oracle')).toThrow(
+            expect.objectContaining({ name: 'MarketStateError', code: 'MISSING_STATE' }),
+        );
     });
 });
 
@@ -106,9 +108,7 @@ describe('parseOracleInstance', () => {
     });
 
     it('throws when a required key is absent', () => {
-        expect(() => parseOracleInstance(contractInstance([]))).toThrow(
-            /missing Verifier/,
-        );
+        expect(() => parseOracleInstance(contractInstance([]))).toThrow(/missing Verifier/);
     });
 });
 
@@ -124,8 +124,7 @@ describe('parseFactoryInstance', () => {
             ]
                 .sort((a, b) => (a[0] as string).localeCompare(b[0] as string))
                 .map(
-                    ([k, v]) =>
-                        new xdr.ScMapEntry({ key: sym(k as string), val: v as xdr.ScVal }),
+                    ([k, v]) => new xdr.ScMapEntry({ key: sym(k as string), val: v as xdr.ScVal }),
                 ),
         );
         const state = parseFactoryInstance(
@@ -139,9 +138,7 @@ describe('parseFactoryInstance', () => {
     });
 
     it('throws when InitMeta is absent', () => {
-        expect(() => parseFactoryInstance(contractInstance([]))).toThrow(
-            /missing InitMeta/,
-        );
+        expect(() => parseFactoryInstance(contractInstance([]))).toThrow(/missing InitMeta/);
     });
 });
 
@@ -164,9 +161,7 @@ describe('parseGovernanceInstance', () => {
 
     it('defaults the nonce to 0, matching next_nonce unwrap_or(0)', () => {
         const state = parseGovernanceInstance(
-            contractInstance([
-                new xdr.ScMapEntry({ key: unitKey('Delay'), val: u64(60n) }),
-            ]),
+            contractInstance([new xdr.ScMapEntry({ key: unitKey('Delay'), val: u64(60n) })]),
         );
         expect(state.nonce).toBe(0);
         expect(state.owner).toBeUndefined();

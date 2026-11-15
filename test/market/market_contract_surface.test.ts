@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { xdr, nativeToScVal, scValToNative, Address, StrKey } from '@stellar/stellar-sdk';
 import { MarketContract, DeployArgs } from '../../src/contracts/market/contract.js';
 import {
-    OrderKind, VaultOrderKind, MarketConfig, marketConfigToScVal,
+    OrderKind,
+    VaultOrderKind,
+    MarketConfig,
+    marketConfigToScVal,
 } from '../../src/contracts/market/types.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 1));
@@ -28,17 +31,40 @@ function decodeInvoke(operation: string) {
 
 function makeConfig(): MarketConfig {
     return {
-        keeperRate: 1n, minPositionNotional: 1n, maxPositionNotional: 2n,
-        maxOpenInterest: 2n, minOrderNotional: 1n, minOrderMargin: 1n,
-        execFee: 1n, feeDom: 1n, feeNonDom: 1n, impactScalar: 1n,
-        maxUtilOpen: 1n, maxUtilWithdraw: 1n, initMargin: 1n,
-        maintenanceMargin: 1n, liqFee: 1n, notionalLock: 60n, targetUtil: 1n,
-        borrowRate: 1n, increasedBorrowRate: 1n, fundingIncrease: 1n,
-        fundingDecrease: 1n, thresholdStableFunding: 1n,
-        thresholdDecreaseFunding: 1n, fundingMin: 1n, fundingMax: 1n,
-        adlMaxPnl: 1n, adlClearTarget: 1n, maxPnlTrader: 1n,
-        maxPnlWithdraw: 1n, redeemLock: 60n, depositFee: 1n, redeemFee: 1n,
-        minDeposit: 1n, maxVaultBalance: 100n,
+        keeperRate: 1n,
+        minPositionNotional: 1n,
+        maxPositionNotional: 2n,
+        maxOpenInterest: 2n,
+        minOrderNotional: 1n,
+        minOrderMargin: 1n,
+        execFee: 1n,
+        feeDom: 1n,
+        feeNonDom: 1n,
+        impactScalar: 1n,
+        maxUtilOpen: 1n,
+        maxUtilWithdraw: 1n,
+        initMargin: 1n,
+        maintenanceMargin: 1n,
+        liqFee: 1n,
+        notionalLock: 60n,
+        targetUtil: 1n,
+        borrowRate: 1n,
+        increasedBorrowRate: 1n,
+        fundingIncrease: 1n,
+        fundingDecrease: 1n,
+        thresholdStableFunding: 1n,
+        thresholdDecreaseFunding: 1n,
+        fundingMin: 1n,
+        fundingMax: 1n,
+        adlMaxPnl: 1n,
+        adlClearTarget: 1n,
+        maxPnlTrader: 1n,
+        maxPnlWithdraw: 1n,
+        redeemLock: 60n,
+        depositFee: 1n,
+        redeemFee: 1n,
+        minDeposit: 1n,
+        maxVaultBalance: 100n,
     };
 }
 
@@ -50,26 +76,32 @@ const sidePair = (long: bigint, short: bigint) =>
     xdr.ScVal.scvMap([entry('long', i128(long)), entry('short', i128(short))]);
 
 // Alphabetical field order, matching #[contracttype] serialization.
-const marketDataScVal = () => xdr.ScVal.scvMap([
-    entry('accrued_at', u64(3n)),
-    entry('borrowing_idx', sidePair(1n, 2n)),
-    entry('borrowing_weight', sidePair(16n, 17n)),
-    entry('credit_owed', i128(8n)),
-    entry('credit_pool', i128(9n)),
-    entry('margin', sidePair(4n, 5n)),
-    entry('funding_idx', sidePair(6n, 7n)),
-    entry('funding_rate', i128(10n)),
-    entry('notional', sidePair(12n, 13n)),
-    entry('tokens', sidePair(14n, 15n)),
-]);
+const marketDataScVal = () =>
+    xdr.ScVal.scvMap([
+        entry('accrued_at', u64(3n)),
+        entry('borrowing_idx', sidePair(1n, 2n)),
+        entry('borrowing_weight', sidePair(16n, 17n)),
+        entry('credit_owed', i128(8n)),
+        entry('credit_pool', i128(9n)),
+        entry('margin', sidePair(4n, 5n)),
+        entry('funding_idx', sidePair(6n, 7n)),
+        entry('funding_rate', i128(10n)),
+        entry('notional', sidePair(12n, 13n)),
+        entry('tokens', sidePair(14n, 15n)),
+    ]);
 
 describe('MarketContract full surface', () => {
     const contract = new MarketContract(CONTRACT_ID);
 
     it('deploy builds a createCustomContract op with the constructor args', () => {
         const args: DeployArgs = {
-            owner: OWNER, token: TOKEN, vault: VAULT, oracle: ORACLE,
-            treasury: TREASURY, feedId: FEED_ID, config: makeConfig(),
+            owner: OWNER,
+            token: TOKEN,
+            vault: VAULT,
+            oracle: ORACLE,
+            treasury: TREASURY,
+            feedId: FEED_ID,
+            config: makeConfig(),
         };
         const opHex = MarketContract.deploy(OWNER, Buffer.alloc(32, 9).toString('hex'), args);
         const body = xdr.Operation.fromXDR(opHex, 'base64').body().invokeHostFunctionOp();
@@ -83,7 +115,13 @@ describe('MarketContract full surface', () => {
         const opBuf = MarketContract.deploy(OWNER, Buffer.alloc(32, 9), args, Buffer.alloc(32, 2));
         expect(opBuf).toBeTypeOf('string');
         // base64 string format variant
-        const opB64 = MarketContract.deploy(OWNER, Buffer.alloc(32, 9).toString('base64'), args, undefined, 'base64');
+        const opB64 = MarketContract.deploy(
+            OWNER,
+            Buffer.alloc(32, 9).toString('base64'),
+            args,
+            undefined,
+            'base64',
+        );
         expect(opB64).toBeTypeOf('string');
     });
 
@@ -98,7 +136,9 @@ describe('MarketContract full surface', () => {
     });
 
     it('builds trader ops (vault orders, credit claim, cancels)', () => {
-        const createVaultOrder = decodeInvoke(contract.createVaultOrder(USER, VaultOrderKind.Deposit, 100n, 5n));
+        const createVaultOrder = decodeInvoke(
+            contract.createVaultOrder(USER, VaultOrderKind.Deposit, 100n, 5n),
+        );
         expect(createVaultOrder.fn).toBe('create_vault_order');
         expect(createVaultOrder.args).toEqual([USER, 0, 100n, 5n]);
 
@@ -120,7 +160,9 @@ describe('MarketContract full surface', () => {
         expect(executeOrder.fn).toBe('execute_order');
         expect(executeOrder.args).toEqual([KEEPER, USER, 1, PRICE]);
 
-        const executeOrderU8 = decodeInvoke(contract.executeOrder(KEEPER, USER, 1, new Uint8Array([1, 2, 3])));
+        const executeOrderU8 = decodeInvoke(
+            contract.executeOrder(KEEPER, USER, 1, new Uint8Array([1, 2, 3])),
+        );
         expect(executeOrderU8.args[3]).toEqual(Buffer.from([1, 2, 3]));
 
         const liquidation = decodeInvoke(contract.executeLiquidation(KEEPER, USER, true, PRICE));
@@ -204,11 +246,21 @@ describe('MarketContract full surface', () => {
             expect(parsers.getClaimableCredit(i128(16n).toXDR('base64'))).toBe(16n);
             expect(parsers.getStatus(xdr.ScVal.scvU32(3).toXDR('base64'))).toBe(3);
             expect(parsers.getOrderCounter(xdr.ScVal.scvU32(6).toXDR('base64'))).toBe(6);
-            expect(parsers.getToken(Address.fromString(TOKEN).toScVal().toXDR('base64'))).toBe(TOKEN);
-            expect(parsers.getVault(Address.fromString(VAULT).toScVal().toXDR('base64'))).toBe(VAULT);
-            expect(parsers.getTreasury(Address.fromString(TREASURY).toScVal().toXDR('base64'))).toBe(TREASURY);
-            expect(parsers.getOracle(Address.fromString(ORACLE).toScVal().toXDR('base64'))).toBe(ORACLE);
-            expect(parsers.getOwner(Address.fromString(OWNER).toScVal().toXDR('base64'))).toBe(OWNER);
+            expect(parsers.getToken(Address.fromString(TOKEN).toScVal().toXDR('base64'))).toBe(
+                TOKEN,
+            );
+            expect(parsers.getVault(Address.fromString(VAULT).toScVal().toXDR('base64'))).toBe(
+                VAULT,
+            );
+            expect(
+                parsers.getTreasury(Address.fromString(TREASURY).toScVal().toXDR('base64')),
+            ).toBe(TREASURY);
+            expect(parsers.getOracle(Address.fromString(ORACLE).toScVal().toXDR('base64'))).toBe(
+                ORACLE,
+            );
+            expect(parsers.getOwner(Address.fromString(OWNER).toScVal().toXDR('base64'))).toBe(
+                OWNER,
+            );
             expect(parsers.getOwner(xdr.ScVal.scvVoid().toXDR('base64'))).toBeUndefined();
         });
 
@@ -239,7 +291,10 @@ describe('MarketContract full surface', () => {
             const position = xdr.ScVal.scvMap([
                 entry('borrowing_idx', i128(1n)),
                 entry('margin', i128(2n)),
-                entry('decrease_orders', xdr.ScVal.scvVec([xdr.ScVal.scvU32(11), xdr.ScVal.scvU32(12)])),
+                entry(
+                    'decrease_orders',
+                    xdr.ScVal.scvVec([xdr.ScVal.scvU32(11), xdr.ScVal.scvU32(12)]),
+                ),
                 entry('funding_idx', i128(3n)),
                 entry('locked_notional', i128(4n)),
                 entry('notional', i128(5n)),

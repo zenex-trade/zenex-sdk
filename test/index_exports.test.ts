@@ -11,6 +11,10 @@ import * as SDK from '../src/index.js';
 // decoder functions that produce them.
 // =============================================================================
 
+// The same barrel, untyped, for asserting that a removed name stays absent.
+const surface = SDK as unknown as Record<string, unknown>;
+const fixedMath = SDK.FixedMath as unknown as Record<string, unknown>;
+
 describe('package root exports', () => {
     it('exports every contract class', () => {
         expect(SDK.MarketContract).toBeTypeOf('function');
@@ -55,12 +59,8 @@ describe('package root exports', () => {
 
     it('does not export the removed kind-to-ScVal converters', () => {
         // Kinds now cross the ABI as plain u32; the wrapper converters are gone.
-        expect(
-            (SDK as Record<string, unknown>).orderKindToScVal,
-        ).toBeUndefined();
-        expect(
-            (SDK as Record<string, unknown>).vaultOrderKindToScVal,
-        ).toBeUndefined();
+        expect((SDK as Record<string, unknown>).orderKindToScVal).toBeUndefined();
+        expect((SDK as Record<string, unknown>).vaultOrderKindToScVal).toBeUndefined();
     });
 
     it('exports the estimate tier and keeps the engine internal', () => {
@@ -79,12 +79,8 @@ describe('package root exports', () => {
         expect(sdk.advanceMarketAccruals).toBeUndefined();
         expect(SDK.MarketPosition.prototype.pnl).toBeTypeOf('function');
         expect(SDK.MarketPosition.prototype.equity).toBeTypeOf('function');
-        expect(SDK.MarketPosition.prototype.liquidationPrice).toBeTypeOf(
-            'function',
-        );
-        expect(SDK.MarketPosition.prototype.isLiquidatable).toBeTypeOf(
-            'function',
-        );
+        expect(SDK.MarketPosition.prototype.liquidationPrice).toBeTypeOf('function');
+        expect(SDK.MarketPosition.prototype.isLiquidatable).toBeTypeOf('function');
         expect(SDK.MarketPosition.prototype.estimate).toBeTypeOf('function');
         expect(SDK.MarketPosition.prototype.preview).toBeTypeOf('function');
     });
@@ -92,12 +88,8 @@ describe('package root exports', () => {
     it('exports the event enums and decoders', () => {
         expect(SDK.MarketEventType.CreateOrder).toBe('create_order');
         expect(SDK.MarketEventType.CancelOrder).toBe('cancel_order');
-        expect(SDK.MarketEventType.CreateVaultOrder).toBe(
-            'create_vault_order',
-        );
-        expect(SDK.MarketEventType.CancelVaultOrder).toBe(
-            'cancel_vault_order',
-        );
+        expect(SDK.MarketEventType.CreateVaultOrder).toBe('create_vault_order');
+        expect(SDK.MarketEventType.CancelVaultOrder).toBe('cancel_vault_order');
         expect(SDK.MarketEventType.DepositFill).toBe('deposit_fill');
         expect(SDK.MarketEventType.RedeemFill).toBe('redeem_fill');
         expect(SDK.MarketEventType.RejectVaultOrder).toBe('reject_vault_order');
@@ -106,15 +98,15 @@ describe('package root exports', () => {
         expect(SDK.MarketEventType.IncreaseFill).toBe('increase_fill');
         expect(SDK.MarketEventType.DecreaseFill).toBe('decrease_fill');
         expect(SDK.MarketEventType.Liquidation).toBe('liquidation');
-        expect(SDK.decodeMarketEvent).toBeUndefined();
+        expect(surface.decodeMarketEvent).toBeUndefined();
         // Bare #[contractevent] name topics are snake_case of the struct name.
         expect(SDK.VaultEventType.Deposit).toBe('deposit');
         expect(SDK.VaultEventType.Withdraw).toBe('withdraw');
         expect(SDK.VaultEventType.StrategyWithdraw).toBe('strategy_withdraw');
-        expect(SDK.decodeVaultEvent).toBeUndefined();
+        expect(surface.decodeVaultEvent).toBeUndefined();
         expect(SDK.GovernanceEventType.Queued).toBe('queued');
         expect(SDK.GovernanceEventType.StatusSet).toBe('status_set');
-        expect(SDK.decodeGovernanceEvent).toBeUndefined();
+        expect(surface.decodeGovernanceEvent).toBeUndefined();
         expect(SDK.FactoryEventType.Deploy).toBe('deploy');
         expect(SDK.FactoryEventType.InitMetaUpdate).toBe('init_meta_update');
         expect(SDK.FeeForwarderEventType.FeeCollected).toBe('fee_collected');
@@ -128,10 +120,10 @@ describe('package root exports', () => {
         expect(SDK.ZenexContractType.Treasury).toBe('treasury');
         expect(SDK.ZenexContractType.FeeForwarder).toBe('fee_forwarder');
         // The event surface is types-only; consumers own their decode path.
-        expect(SDK.decodeEvent).toBeUndefined();
-        expect(SDK.normalizeRpc).toBeUndefined();
-        expect(SDK.normalizeMercury).toBeUndefined();
-        expect(SDK.normalizeGoldsky).toBeUndefined();
+        expect(surface.decodeEvent).toBeUndefined();
+        expect(surface.normalizeRpc).toBeUndefined();
+        expect(surface.normalizeMercury).toBeUndefined();
+        expect(surface.normalizeGoldsky).toBeUndefined();
     });
 
     it('carries only the contract ABI event kinds', () => {
@@ -141,25 +133,21 @@ describe('package root exports', () => {
         const eventTypes = SDK.MarketEventType as Record<string, unknown>;
         expect(eventTypes.PositionUpdate).toBeUndefined();
         expect(eventTypes.ExecuteVaultOrder).toBeUndefined();
-        expect(Object.values(SDK.MarketEventType)).not.toContain(
-            'position_update',
-        );
-        expect(Object.values(SDK.MarketEventType)).not.toContain(
-            'execute_vault_order',
-        );
+        expect(Object.values(SDK.MarketEventType)).not.toContain('position_update');
+        expect(Object.values(SDK.MarketEventType)).not.toContain('execute_vault_order');
     });
 
     it('exports the market-router converters and parsers', () => {
         expect(SDK.callToScVal).toBeTypeOf('function');
         expect(SDK.createOrderCall).toBeTypeOf('function');
         expect(SDK.parseCallOutcome).toBeTypeOf('function');
-        expect(SDK.parseFillAttempt).toBeUndefined();
-        expect(SDK.adlTargetToScVal).toBeUndefined();
+        expect(surface.parseFillAttempt).toBeUndefined();
+        expect(surface.adlTargetToScVal).toBeUndefined();
     });
 
     it('does not export the removed token approve/bundle helpers', () => {
-        expect(SDK.approveCall).toBeUndefined();
-        expect(SDK.approveAndOrder).toBeUndefined();
+        expect(surface.approveCall).toBeUndefined();
+        expect(surface.approveAndOrder).toBeUndefined();
     });
 
     it('exports the errors and response parsing surface', () => {
@@ -185,6 +173,7 @@ describe('package root exports', () => {
         expect(SDK.ZenexErrorCode.QuoteOverflow).toBe(-1002);
         expect(SDK.zenexErrorFromCode).toBeTypeOf('function');
         expect(SDK.parseContractErrorCode).toBeTypeOf('function');
+        expect(SDK.inferErrorSource).toBeTypeOf('function');
         expect(SDK.parseError).toBeTypeOf('function');
         expect(SDK.parseResult).toBeTypeOf('function');
     });
@@ -226,11 +215,11 @@ describe('package root exports', () => {
         expect(SDK.toFloat).toBeTypeOf('function');
         expect(SDK.simulateAndParse).toBeTypeOf('function');
         // Not part of the public surface:
-        expect(SDK.getAssetKey).toBeUndefined();
-        expect(SDK.assetFromKey).toBeUndefined();
-        expect(SDK.FixedMath.mulFloor).toBeUndefined();
-        expect(SDK.FixedMath.divFloor).toBeUndefined();
-        expect(SDK.VaultState).toBeUndefined();
+        expect(surface.getAssetKey).toBeUndefined();
+        expect(surface.assetFromKey).toBeUndefined();
+        expect(fixedMath.mulFloor).toBeUndefined();
+        expect(fixedMath.divFloor).toBeUndefined();
+        expect(surface.VaultState).toBeUndefined();
     });
 
     it('exports the loaded classes, intents, and order helpers', () => {
@@ -245,7 +234,10 @@ describe('package root exports', () => {
         expect(SDK.loadTreasuryInstance).toBeTypeOf('function');
         expect(SDK.MarketStateError).toBeTypeOf('function');
         // The loaded-class surface.
-        expect(SDK.Market.prototype.loadUser).toBeTypeOf('function');
+        // `loadUser` is gone with the snapshot's network: `MarketUser.load` reads a user.
+        expect('loadUser' in SDK.Market.prototype).toBe(false);
+        expect(SDK.MarketUser.load).toBeTypeOf('function');
+        expect(SDK.MarketPosition.zero).toBeTypeOf('function');
         expect(SDK.Market.prototype.estimate).toBeTypeOf('function');
         expect(SDK.Market.prototype.accrue).toBeTypeOf('function');
         expect(SDK.Market.prototype.openCapacity).toBeTypeOf('function');
@@ -257,9 +249,7 @@ describe('package root exports', () => {
         expect(SDK.OrderIntent.prototype.stopLoss).toBeTypeOf('function');
         expect(SDK.VaultOrderIntent.create).toBeTypeOf('function');
         expect(SDK.VaultOrderIntent.prototype.fills).toBeTypeOf('function');
-        expect(SDK.VaultOrderIntent.prototype.toOperation).toBeTypeOf(
-            'function',
-        );
+        expect(SDK.VaultOrderIntent.prototype.toOperation).toBeTypeOf('function');
         // The batching machinery is gone: no consumer ever used it.
         const sdk = SDK as Record<string, unknown>;
         expect(sdk.readEntries).toBeUndefined();
@@ -267,10 +257,8 @@ describe('package root exports', () => {
         expect(sdk.MAX_KEYS_PER_REQUEST).toBeUndefined();
         expect(sdk.marketKeys).toBeUndefined();
         expect(sdk.marketUserKeys).toBeUndefined();
-        expect((SDK.Market as Record<string, unknown>).loadMany).toBeUndefined();
-        expect(
-            (SDK.MarketUser as Record<string, unknown>).loadMany,
-        ).toBeUndefined();
+        expect((SDK.Market as unknown as Record<string, unknown>).loadMany).toBeUndefined();
+        expect((SDK.MarketUser as unknown as Record<string, unknown>).loadMany).toBeUndefined();
         // The display module and the old execution machinery are gone.
         expect(sdk.Display).toBeUndefined();
         expect(sdk.positionDisplay).toBeUndefined();
@@ -317,14 +305,12 @@ describe('package root exports', () => {
 
     it('does not export the removed v1 oracle helpers', () => {
         expect((SDK as Record<string, unknown>).getOraclePrice).toBeUndefined();
-        expect(
-            (SDK as Record<string, unknown>).getOracleDecimals,
-        ).toBeUndefined();
+        expect((SDK as Record<string, unknown>).getOracleDecimals).toBeUndefined();
     });
 
     it('does not carry the extracted backend data and relay surface', () => {
         // The data-service client and relay request building moved to the
-        // frontend-internal zenex-data lib; the SDK is chain-only.
+        // application side; the SDK is chain-only.
         const sdk = SDK as Record<string, unknown>;
         expect(sdk.ZenexDataClient).toBeUndefined();
         expect(sdk.streamZenexEvents).toBeUndefined();

@@ -6,8 +6,10 @@ import { contractInstanceLedgerKey } from '../../src/contracts/keys.js';
 import { marketDataLedgerKey } from '../../src/contracts/market/keys.js';
 import { tokenBalanceLedgerKey } from '../../src/token.js';
 import { Status } from '../../src/contracts/market/types.js';
+import type { MarketConfig, MarketData } from '../../src/contracts/market/types.js';
 import type { Network } from '../../src/index.js';
 import {
+    contractInstance,
     makeConfig,
     marketDataScVal,
     marketInstanceScVal,
@@ -21,13 +23,15 @@ import {
     fixtureMarket,
     flatPosition,
     linkedEntries,
+    loneBook,
+    lonePosition,
     px,
     unit,
 } from './market_fixture.js';
 import { OrderIntent, previewOrder } from '../../src/trading/order.js';
+import { MarketPosition } from '../../src/trading/position.js';
 
 const MARKET = StrKey.encodeContract(Buffer.alloc(32, 1));
-const MARKET_B = StrKey.encodeContract(Buffer.alloc(32, 9));
 const VAULT = StrKey.encodeContract(Buffer.alloc(32, 2));
 const VAULT_B = StrKey.encodeContract(Buffer.alloc(32, 10));
 const TOKEN = StrKey.encodeContract(Buffer.alloc(32, 3));
@@ -43,7 +47,6 @@ const network: Network = {
 };
 
 const contracts: MarketContracts = { market: MARKET, vault: VAULT, token: TOKEN };
-const contractsB: MarketContracts = { market: MARKET_B, vault: VAULT_B, token: TOKEN };
 
 function marketEntries(
     where: MarketContracts,
@@ -80,9 +83,7 @@ function marketEntries(
         ),
     ];
     if (!overrides.omitData) {
-        entries.push(
-            ledgerEntryFor(marketDataLedgerKey(where.market), marketDataScVal()),
-        );
+        entries.push(ledgerEntryFor(marketDataLedgerKey(where.market), marketDataScVal()));
     }
     if (!overrides.omitBalance) {
         entries.push(
@@ -214,9 +215,7 @@ describe('Market.load', () => {
         const spy = mockEntries(marketEntries(contracts));
         await Market.load(network, contracts);
         const sent = spy.mock.calls[0].map((k) => (k as xdr.LedgerKey).toXDR('base64'));
-        expect(sent).toContain(
-            tokenBalanceLedgerKey(TOKEN, VAULT).toXDR('base64'),
-        );
+        expect(sent).toContain(tokenBalanceLedgerKey(TOKEN, VAULT).toXDR('base64'));
     });
 
     it('fails closed on a required entry the RPC omitted', async () => {
@@ -233,6 +232,30 @@ describe('Market.load', () => {
         await expect(Market.load(network, contracts)).rejects.toThrow(
             /TTL-expired.*restore or extend/,
         );
+    });
+
+    it('keeps an entry live through its live-until ledger, inclusive', async () => {
+        // Soroban's rule: live while liveUntil >= ledger. Equal is still live.
+        mockEntries(marketEntries(contracts, { liveUntil: 4242 }), 4242);
+        const market = await Market.load(network, contracts);
+        expect(market.ledger).toBe(4242);
+        // One ledger later the same entry has lapsed.
+        mockEntries(marketEntries(contracts, { liveUntil: 4242 }), 4243);
+        await expect(Market.load(network, contracts)).rejects.toMatchObject({
+            name: 'MarketStateError',
+            code: 'MISSING_STATE',
+        });
+    });
+
+    it('fails closed with a typed error on an instance missing a required key', async () => {
+        // A market instance that holds nothing.
+        mockEntries(marketEntries(contracts, { instance: contractInstance([]) }));
+        const failure = await Market.load(network, contracts).catch((error) => error);
+        expect(failure).toBeInstanceOf(MarketStateError);
+        expect(failure).toMatchObject({
+            code: 'MISSING_STATE',
+            message: expect.stringContaining('market instance is missing'),
+        });
     });
 
     it('rejects contracts the market itself disagrees with', async () => {
@@ -334,6 +357,176 @@ describe('Market accessors', () => {
     });
 });
 
+describe('Market constructor (one fields object)', () => {
+    const fields = {
+        id: MARKET,
+        ledger: 7,
+        vault: VAULT,
+        token: TOKEN,
+        oracle: ORACLE,
+        treasury: TREASURY,
+        feedId: Buffer.from(TEST_FEED_ID),
+        status: Status.Active,
+        config: makeConfig(),
+        data: fixtureMarket().data,
+        adl: { long: false, short: false },
+        vaultAssets: unit(1000),
+        vaultShares: unit(1000) * 1_000_000n,
+        vaultDecimalsOffset: 6,
+        assetDecimals: 7,
+        treasuryRate: 5n * 10n ** 16n,
+        spreadReductionFactor: 0n,
+    };
+
+    it('builds a snapshot from named fields', () => {
+        const market = new Market(fields);
+        expect(market.id).toBe(MARKET);
+        expect(market.ledger).toBe(7);
+        expect(market.treasuryRate).toBe(5n * 10n ** 16n);
+        expect(market.spreadReductionFactor).toBe(0n);
+        // The optional fields read undefined.
+        expect(market.owner).toBeUndefined();
+        expect(market.terminalPrice).toBeUndefined();
+        expect(market.delistedAt).toBeUndefined();
+    });
+
+    it('requires the treasury rate', () => {
+        const { treasuryRate: _rate, ...rest } = fields;
+        // @ts-expect-error treasuryRate has no default: a 0 rate overstates a redeem quote.
+        expect(() => new Market(rest)).toThrow(TypeError);
+    });
+
+    it('requires the spread reduction factor', () => {
+        const { spreadReductionFactor: _factor, ...rest } = fields;
+        // @ts-expect-error spreadReductionFactor has no default: a 0 factor
+        // prices a report wider than a narrowing oracle fills it.
+        expect(() => new Market(rest)).toThrow(
+            "new Market() is missing the required field 'spreadReductionFactor'",
+        );
+    });
+
+    it('names the first missing required field', () => {
+        const untyped = Market as unknown as new (fields: object) => Market;
+        const { feedId: _feed, config: _config, ...rest } = fields;
+        expect(() => new untyped(rest)).toThrow(TypeError);
+        expect(() => new untyped(rest)).toThrow(
+            "new Market() is missing the required field 'feedId'",
+        );
+        expect(() => new untyped({})).toThrow("new Market() is missing the required field 'id'");
+        expect(() => new untyped({ ...fields, data: undefined })).toThrow(
+            "new Market() is missing the required field 'data'",
+        );
+        // The three a market can lack stay optional.
+        const optional = { owner: undefined, terminalPrice: undefined, delistedAt: undefined };
+        expect(new untyped({ ...fields, ...optional })).toBeInstanceOf(Market);
+    });
+
+    it('rejects the positional arguments it took before 1.0.0', () => {
+        const positional = Market as unknown as new (...args: unknown[]) => Market;
+        expect(() => new positional(network, MARKET, 7, VAULT, TOKEN)).toThrow(TypeError);
+        expect(() => new positional()).toThrow(/takes one fields object/);
+    });
+
+    it('holds no network, only the snapshot fields', () => {
+        const market = new Market(fields);
+        expect('network' in market).toBe(false);
+        expect(Object.keys(market).sort()).toEqual([
+            'adl',
+            'assetDecimals',
+            'config',
+            'data',
+            'delistedAt',
+            'feedId',
+            'id',
+            'ledger',
+            'oracle',
+            'owner',
+            'spreadReductionFactor',
+            'status',
+            'terminalPrice',
+            'token',
+            'treasury',
+            'treasuryRate',
+            'vault',
+            'vaultAssets',
+            'vaultDecimalsOffset',
+            'vaultShares',
+        ]);
+    });
+
+    it('derives a changed copy by spreading a snapshot', () => {
+        const market = new Market(fields);
+        const frozen = new Market({ ...market, status: Status.Frozen });
+        expect(frozen.status).toBe(Status.Frozen);
+        expect(market.status).toBe(Status.Active);
+        expect(frozen.data).toBe(market.data);
+        expect(frozen).toBeInstanceOf(Market);
+    });
+
+    it('owns its nested state: neither the fields passed in nor a derived snapshot can change it', () => {
+        const source = fixtureMarket().data;
+        const mutable = {
+            ...fields,
+            feedId: Buffer.from(TEST_FEED_ID),
+            config: makeConfig(),
+            data: { ...source, notional: { ...source.notional } } as MarketData,
+            adl: { long: false, short: false },
+        };
+        const market = new Market(mutable);
+        const capacity = market.openCapacity(true, px(100));
+
+        // The caller's own objects stay writable and are detached.
+        mutable.config.maxUtilOpen /= 2n;
+        mutable.data.notional.long += 1n;
+        mutable.adl.long = !mutable.adl.long;
+        mutable.feedId[0] ^= 0xff;
+        expect(market.config.maxUtilOpen).toBe(mutable.config.maxUtilOpen * 2n);
+        expect(market.data.notional.long).toBe(mutable.data.notional.long - 1n);
+        expect(market.adl.long).toBe(!mutable.adl.long);
+        expect(market.feedId[0]).toBe(mutable.feedId[0] ^ 0xff);
+
+        // A derived snapshot shares the frozen state, and a write through
+        // it throws instead of reaching the original.
+        const rated = market.withTreasuryRate(1n);
+        const writable = rated as unknown as {
+            config: MarketConfig;
+            data: MarketData;
+            adl: { long: boolean };
+        };
+        expect(() => {
+            writable.config.maxUtilOpen /= 2n;
+        }).toThrow(TypeError);
+        expect(() => {
+            writable.data.creditPool = 1n;
+        }).toThrow(TypeError);
+        expect(() => {
+            writable.data.notional.long = 1n;
+        }).toThrow(TypeError);
+        expect(() => {
+            writable.adl.long = true;
+        }).toThrow(TypeError);
+        rated.feedId[0] ^= 0xff;
+        expect(market.feedId[0]).toBe(rated.feedId[0] ^ 0xff);
+        expect(market.openCapacity(true, px(100))).toBe(capacity);
+    });
+
+    it('declares its fields readonly', () => {
+        const market = new Market(fields);
+        const assign = () => {
+            // @ts-expect-error fields are readonly: build a new snapshot instead.
+            market.status = Status.Frozen;
+        };
+        expect(assign).toBeTypeOf('function');
+    });
+
+    it('withTreasuryRate copies every field and changes the rate', () => {
+        const market = new Market({ ...fields, spreadReductionFactor: 3n, owner: USER });
+        const rated = market.withTreasuryRate(1n);
+        expect(rated.treasuryRate).toBe(1n);
+        expect({ ...rated, treasuryRate: market.treasuryRate }).toEqual({ ...market });
+    });
+});
+
 describe('the treasury rate in previews', () => {
     // The treasury's cut leaves the vault, so the settled balance that gates
     // an open (#714) is smaller at a nonzero rate. A load reads the live rate;
@@ -345,13 +538,7 @@ describe('the treasury rate in previews', () => {
                 notional,
                 margin: notional / 5n,
             });
-            return previewOrder(
-                market.withTreasuryRate(rate),
-                flatPosition(),
-                order,
-                px(1),
-                1n,
-            );
+            return previewOrder(market.withTreasuryRate(rate), flatPosition(), order, px(1), 1n);
         };
         let low = unit(100);
         let high = unit(600);
@@ -363,5 +550,142 @@ describe('the treasury rate in previews', () => {
         expect(outcome(0n, low).outcome).toBe('fills');
         expect(outcome(0n, low + 1n).gate?.code).toBe(714);
         expect(outcome(3n * 10n ** 17n, low).gate?.code).toBe(714);
+    });
+});
+
+describe('MarketPosition constructor (one fields object)', () => {
+    const fields = {
+        isLong: true,
+        margin: unit(10),
+        notional: unit(100),
+        tokens: unit(10),
+        fundingIdx: 1n,
+        borrowingIdx: 2n,
+        lockedNotional: 3n,
+        unlocksAt: 4n,
+        pricedAt: 5n,
+        decreaseOrders: [8, 9],
+    };
+
+    it('builds a position from named fields', () => {
+        const position = new MarketPosition(fields);
+        expect({ ...position }).toEqual(fields);
+        expect(position.isOpen()).toBe(true);
+        expect(Object.keys(position).sort()).toEqual([
+            'borrowingIdx',
+            'decreaseOrders',
+            'fundingIdx',
+            'isLong',
+            'lockedNotional',
+            'margin',
+            'notional',
+            'pricedAt',
+            'tokens',
+            'unlocksAt',
+        ]);
+    });
+
+    it('matches MarketPosition.from for the same row', () => {
+        const { isLong, ...row } = fields;
+        expect(MarketPosition.from(row, isLong)).toEqual(new MarketPosition(fields));
+    });
+
+    it('owns a frozen copy of decreaseOrders: neither the fields passed in nor a derived position can change it', () => {
+        const decreaseOrders = [8, 9];
+        const position = new MarketPosition({ ...fields, decreaseOrders });
+        decreaseOrders.push(10);
+        expect(position.decreaseOrders).toEqual([8, 9]);
+        expect(Object.isFrozen(position.decreaseOrders)).toBe(true);
+        // The caller's array stays writable.
+        expect(Object.isFrozen(decreaseOrders)).toBe(false);
+
+        // @ts-expect-error the list is readonly: derive a copy instead.
+        expect(() => position.decreaseOrders.push(11)).toThrow(TypeError);
+        expect(position.decreaseOrders).toEqual([8, 9]);
+
+        const derived = new MarketPosition({ ...position, margin: unit(20) });
+        expect(derived.margin).toBe(unit(20));
+        expect(position.margin).toBe(unit(10));
+        expect(derived.decreaseOrders).not.toBe(position.decreaseOrders);
+        expect(Object.isFrozen(derived.decreaseOrders)).toBe(true);
+        expect(Object.isFrozen(MarketPosition.zero(true).decreaseOrders)).toBe(true);
+    });
+
+    it('fills against a frozen list: the engine works on its own copy', () => {
+        const market = fixtureMarket({ data: loneBook() });
+        const position = lonePosition({ decreaseOrders: [8, 9] });
+        expect(Object.isFrozen(position.decreaseOrders)).toBe(true);
+        const close = new OrderIntent(market, USER, true).closePosition();
+        const preview = position.preview(market, close, px(10), 1n);
+        expect(preview.outcome).toBe('fills');
+        expect(position.decreaseOrders).toEqual([8, 9]);
+    });
+
+    it('names the first missing field', () => {
+        const untyped = MarketPosition as unknown as new (fields: object) => MarketPosition;
+        const { tokens: _tokens, decreaseOrders: _orders, ...rest } = fields;
+        expect(() => new untyped(rest)).toThrow(TypeError);
+        expect(() => new untyped(rest)).toThrow(
+            "new MarketPosition() is missing the required field 'tokens'",
+        );
+        const { decreaseOrders: _list, ...noOrders } = fields;
+        expect(() => new untyped(noOrders)).toThrow(
+            "new MarketPosition() is missing the required field 'decreaseOrders'",
+        );
+        expect(() => new untyped({})).toThrow(
+            "new MarketPosition() is missing the required field 'isLong'",
+        );
+    });
+
+    it('takes a readonly list of order ids', () => {
+        const frozen: readonly number[] = Object.freeze([1]);
+        expect(new MarketPosition({ ...fields, decreaseOrders: frozen }).decreaseOrders).toEqual([
+            1,
+        ]);
+    });
+
+    it('has readonly fields', () => {
+        const position = new MarketPosition(fields);
+        // @ts-expect-error a position is a snapshot: derive a copy instead.
+        position.margin = 0n;
+    });
+
+    it('rejects the positional arguments it took before 1.0.0', () => {
+        const positional = MarketPosition as unknown as new (...args: unknown[]) => MarketPosition;
+        expect(() => new positional(true, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, [])).toThrow(TypeError);
+        expect(() => new positional()).toThrow(/takes one fields object/);
+        // @ts-expect-error the fields object is the only argument.
+        expect(() => new MarketPosition(true, 0n)).toThrow(TypeError);
+    });
+});
+
+describe('MarketPosition.zero', () => {
+    it('is the contract Position::zeroed for the side', () => {
+        const long = MarketPosition.zero(true);
+        expect(long).toEqual(
+            MarketPosition.from(
+                {
+                    margin: 0n,
+                    notional: 0n,
+                    tokens: 0n,
+                    fundingIdx: 0n,
+                    borrowingIdx: 0n,
+                    lockedNotional: 0n,
+                    unlocksAt: 0n,
+                    pricedAt: 0n,
+                    decreaseOrders: [],
+                },
+                true,
+            ),
+        );
+        expect(long.isLong).toBe(true);
+        expect(long.isOpen()).toBe(false);
+        expect(MarketPosition.zero(false).isLong).toBe(false);
+    });
+
+    it('gives each call its own decreaseOrders array', () => {
+        expect(MarketPosition.zero(true).decreaseOrders).not.toBe(
+            MarketPosition.zero(true).decreaseOrders,
+        );
     });
 });

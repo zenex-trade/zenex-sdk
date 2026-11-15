@@ -37,16 +37,12 @@ export class VaultContract extends Contract {
         // FungibleToken parsers
         totalSupply: (result: string): i128 =>
             VaultContract.spec.funcResToNative('total_supply', result),
-        balance: (result: string): i128 =>
-            VaultContract.spec.funcResToNative('balance', result),
+        balance: (result: string): i128 => VaultContract.spec.funcResToNative('balance', result),
         allowance: (result: string): i128 =>
             VaultContract.spec.funcResToNative('allowance', result),
-        decimals: (result: string): u32 =>
-            VaultContract.spec.funcResToNative('decimals', result),
-        name: (result: string): string =>
-            VaultContract.spec.funcResToNative('name', result),
-        symbol: (result: string): string =>
-            VaultContract.spec.funcResToNative('symbol', result),
+        decimals: (result: string): u32 => VaultContract.spec.funcResToNative('decimals', result),
+        name: (result: string): string => VaultContract.spec.funcResToNative('name', result),
+        symbol: (result: string): string => VaultContract.spec.funcResToNative('symbol', result),
 
         // Vault view parsers
         queryAsset: (result: string): string =>
@@ -78,13 +74,11 @@ export class VaultContract extends Contract {
         wasmHash: Buffer | string,
         args: VaultConstructorArgs,
         salt?: Buffer,
-        format: 'hex' | 'base64' = 'hex'
+        format: 'hex' | 'base64' = 'hex',
     ): string {
         return Operation.createCustomContract({
             address: Address.fromString(deployer),
-            wasmHash: typeof wasmHash === 'string'
-                ? Buffer.from(wasmHash, format)
-                : wasmHash,
+            wasmHash: typeof wasmHash === 'string' ? Buffer.from(wasmHash, format) : wasmHash,
             salt,
             constructorArgs: [
                 nativeToScVal(args.name, { type: 'string' }),
@@ -141,7 +135,7 @@ export class VaultContract extends Contract {
         spender: Address | string,
         from: Address | string,
         to: Address | string,
-        amount: i128
+        amount: i128,
     ): string {
         const spenderAddr = typeof spender === 'string' ? Address.fromString(spender) : spender;
         const fromAddr = typeof from === 'string' ? Address.fromString(from) : from;
@@ -165,7 +159,7 @@ export class VaultContract extends Contract {
         owner: Address | string,
         spender: Address | string,
         amount: i128,
-        liveUntilLedger: u32
+        liveUntilLedger: u32,
     ): string {
         const ownerAddr = typeof owner === 'string' ? Address.fromString(owner) : owner;
         const spenderAddr = typeof spender === 'string' ? Address.fromString(spender) : spender;
@@ -286,7 +280,7 @@ export class VaultContract extends Contract {
         assets: i128,
         receiver: Address | string,
         from: Address | string,
-        netPnl: i128
+        netPnl: i128,
     ): string {
         const receiverAddr = typeof receiver === 'string' ? Address.fromString(receiver) : receiver;
         const fromAddr = typeof from === 'string' ? Address.fromString(from) : from;
@@ -320,7 +314,7 @@ export class VaultContract extends Contract {
         shares: i128,
         receiver: Address | string,
         owner: Address | string,
-        netPnl: i128
+        netPnl: i128,
     ): string {
         const receiverAddr = typeof receiver === 'string' ? Address.fromString(receiver) : receiver;
         const ownerAddr = typeof owner === 'string' ? Address.fromString(owner) : owner;
@@ -341,9 +335,8 @@ export class VaultContract extends Contract {
      *   with `StrategyInvalidAmount` (800) if not positive
      */
     strategyWithdraw(amount: i128): string {
-        return this.call(
-            'strategy_withdraw',
-            nativeToScVal(amount, { type: 'i128' }),
-        ).toXDR('base64');
+        return this.call('strategy_withdraw', nativeToScVal(amount, { type: 'i128' })).toXDR(
+            'base64',
+        );
     }
 }

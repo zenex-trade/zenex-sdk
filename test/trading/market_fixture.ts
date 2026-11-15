@@ -16,6 +16,7 @@ import type {
 } from '../../src/contracts/market/types.js';
 import { Market } from '../../src/trading/market.js';
 import { MarketPosition } from '../../src/trading/position.js';
+import type { MarketPositionFields } from '../../src/trading/position.js';
 
 // Shared builders for trading-tier tests that construct a `Market` directly,
 // the way a cache or an indexer does, instead of mocking a ledger read.
@@ -30,8 +31,7 @@ export const NETWORK = { rpc: 'http://localhost', passphrase: 'test' };
 
 export const TOKEN_DECIMALS = 7;
 /** A token-dec amount; base size is token-dec too at an 18-dec price. */
-export const unit = (whole: number) =>
-    BigInt(whole) * 10n ** BigInt(TOKEN_DECIMALS);
+export const unit = (whole: number) => BigInt(whole) * 10n ** BigInt(TOKEN_DECIMALS);
 /** An 18-dec price from a decimal number of whole units. */
 export const px = (whole: number) =>
     (BigInt(Math.round(whole * 1_000_000)) * SCALAR_18) / 1_000_000n;
@@ -94,9 +94,7 @@ export function linkedEntries(
  * The contract's own `test_config`: 0.5% / 0.3% fees, 10% initial and 5%
  * maintenance margin, 1% liquidation fee, a 100,000.0 impact scalar.
  */
-export function contractTestConfig(
-    overrides: Partial<MarketConfig> = {},
-): MarketConfig {
+export function contractTestConfig(overrides: Partial<MarketConfig> = {}): MarketConfig {
     return {
         keeperRate: SCALAR_18 / 10n,
         minPositionNotional: 10_000_000n,
@@ -176,33 +174,33 @@ export interface MarketFixture {
 /** A loaded `Market`, built by constructor on the contract `test_config`. */
 export function fixtureMarket(fixture: MarketFixture = {}): Market {
     const vaultAssets = fixture.vaultAssets ?? unit(1000);
-    return new Market(
-        NETWORK,
-        MARKET,
-        fixture.ledger ?? 100,
-        VAULT,
-        TOKEN,
-        ORACLE,
-        TREASURY,
-        undefined,
-        Buffer.alloc(32, 1),
-        fixture.status ?? Status.Active,
-        contractTestConfig(fixture.config),
-        marketData(fixture.data),
-        fixture.adl ?? { long: false, short: false },
-        fixture.terminalPrice,
-        fixture.delistedAt,
+    return new Market({
+        id: MARKET,
+        ledger: fixture.ledger ?? 100,
+        vault: VAULT,
+        token: TOKEN,
+        oracle: ORACLE,
+        treasury: TREASURY,
+        owner: undefined,
+        feedId: Buffer.alloc(32, 1),
+        status: fixture.status ?? Status.Active,
+        config: contractTestConfig(fixture.config),
+        data: marketData(fixture.data),
+        adl: fixture.adl ?? { long: false, short: false },
+        terminalPrice: fixture.terminalPrice,
+        delistedAt: fixture.delistedAt,
         vaultAssets,
-        fixture.vaultShares ?? vaultAssets * SHARE_SCALE,
-        SHARE_DECIMALS_OFFSET,
-        TOKEN_DECIMALS,
-        fixture.treasuryRate ?? 0n,
-    );
+        vaultShares: fixture.vaultShares ?? vaultAssets * SHARE_SCALE,
+        vaultDecimalsOffset: SHARE_DECIMALS_OFFSET,
+        assetDecimals: TOKEN_DECIMALS,
+        treasuryRate: fixture.treasuryRate ?? 0n,
+        spreadReductionFactor: 0n,
+    });
 }
 
 /** A side with no stored size, as `MarketUser.load` reads a never-opened row. */
 export function flatPosition(isLong = true): MarketPosition {
-    return new MarketPosition(isLong, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []);
+    return MarketPosition.zero(isLong);
 }
 
 /**
@@ -211,22 +209,22 @@ export function flatPosition(isLong = true): MarketPosition {
  * carry the same row (`loneBook`).
  */
 export function lonePosition(
-    overrides: Partial<MarketPosition> = {},
+    overrides: Partial<MarketPositionFields> = {},
     isLong = true,
 ): MarketPosition {
-    const position = new MarketPosition(
+    return new MarketPosition({
         isLong,
-        unit(10),
-        unit(100),
-        unit(10),
-        0n,
-        0n,
-        0n,
-        0n,
-        0n,
-        [],
-    );
-    return Object.assign(position, overrides);
+        margin: unit(10),
+        notional: unit(100),
+        tokens: unit(10),
+        fundingIdx: 0n,
+        borrowingIdx: 0n,
+        lockedNotional: 0n,
+        unlocksAt: 0n,
+        pricedAt: 0n,
+        decreaseOrders: [],
+        ...overrides,
+    });
 }
 
 /** Market aggregates holding exactly `lonePosition` on one side. */

@@ -148,24 +148,9 @@ describe('quoteVaultOrderCreation', () => {
     });
 
     it.each([
-        [
-            'frozen market',
-            creation({ status: Status.Frozen }),
-            'CONTRACT_GATE',
-            '#704',
-        ],
-        [
-            'retired deposit',
-            creation({ status: Status.Retired }),
-            'CONTRACT_GATE',
-            '#702',
-        ],
-        [
-            'deposit below its creation floor',
-            creation({ amount: 99n }),
-            'CONTRACT_GATE',
-            '#732',
-        ],
+        ['frozen market', creation({ status: Status.Frozen }), 'CONTRACT_GATE', '#704'],
+        ['retired deposit', creation({ status: Status.Retired }), 'CONTRACT_GATE', '#702'],
+        ['deposit below its creation floor', creation({ amount: 99n }), 'CONTRACT_GATE', '#732'],
         [
             'zero deposit with a malformed zero floor',
             creation({
@@ -175,12 +160,7 @@ describe('quoteVaultOrderCreation', () => {
             'CONTRACT_GATE',
             '#732',
         ],
-        [
-            'nonpositive redeem',
-            creation({ action: 'redeem', amount: 0n }),
-            'CONTRACT_GATE',
-            '#732',
-        ],
+        ['nonpositive redeem', creation({ action: 'redeem', amount: 0n }), 'CONTRACT_GATE', '#732'],
         [
             'nonpositive retired direct redeem',
             creation({
@@ -206,25 +186,10 @@ describe('quoteVaultOrderCreation', () => {
             'CONTRACT_GATE',
             '#710',
         ],
-        [
-            'negative minimum output',
-            creation({ minOut: -1n }),
-            'CONTRACT_GATE',
-            '#710',
-        ],
+        ['negative minimum output', creation({ minOut: -1n }), 'CONTRACT_GATE', '#710'],
         // vault_order.rs checks a negative amount before status or size.
-        [
-            'negative deposit',
-            creation({ amount: -5n }),
-            'CONTRACT_GATE',
-            '#710',
-        ],
-        [
-            'negative redeem',
-            creation({ action: 'redeem', amount: -5n }),
-            'CONTRACT_GATE',
-            '#710',
-        ],
+        ['negative deposit', creation({ amount: -5n }), 'CONTRACT_GATE', '#710'],
+        ['negative redeem', creation({ action: 'redeem', amount: -5n }), 'CONTRACT_GATE', '#710'],
         [
             'negative deposit on a frozen market',
             creation({ status: Status.Frozen, amount: -5n }),
@@ -237,17 +202,14 @@ describe('quoteVaultOrderCreation', () => {
             'CONTRACT_GATE',
             '#710',
         ],
-    ] as const)(
-        'rejects %s at the contract creation boundary',
-        (_label, input, code, reason) => {
-            expect(quoteVaultOrderCreation(input)).toEqual({
-                kind: 'unavailable',
-                code,
-                reason: expect.stringContaining(reason),
-                contractCode: Number(reason.slice(1)),
-            });
-        },
-    );
+    ] as const)('rejects %s at the contract creation boundary', (_label, input, code, reason) => {
+        expect(quoteVaultOrderCreation(input)).toEqual({
+            kind: 'unavailable',
+            code,
+            reason: expect.stringContaining(reason),
+            contractCode: Number(reason.slice(1)),
+        });
+    });
 
     it('rejects a deposit whose escrow sum overflows, as the contract does (#732)', () => {
         expect(

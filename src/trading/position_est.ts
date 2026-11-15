@@ -114,26 +114,15 @@ export function estimatePosition(
 
     // Rounds up as the contract does, so the displayed headroom never reads
     // safer than the chain's own check.
-    const maintenanceRaw = mulDivCeil(
-        position.notional,
-        config.maintenanceMargin,
-        SCALAR_18,
-    );
+    const maintenanceRaw = mulDivCeil(position.notional, config.maintenanceMargin, SCALAR_18);
 
     // Closing the whole size: the fee split of `-notional, -tokens` leaving
     // the book, exactly as a close fill charges it.
     const closeFees =
         position.notional > 0n
-            ? quoteTradeFees(
-                  data,
-                  config,
-                  isLong,
-                  -position.notional,
-                  -position.tokens,
-              )
+            ? quoteTradeFees(data, config, isLong, -position.notional, -position.tokens)
             : undefined;
-    const closeFeeRaw =
-        closeFees === undefined ? 0n : closeFees.base + closeFees.impact;
+    const closeFeeRaw = closeFees === undefined ? 0n : closeFees.base + closeFees.impact;
     const netPnlRaw = pnlRaw - closeFeeRaw - fundingRaw - borrowingRaw;
 
     const markFloat = formatPrice(mark);
@@ -143,9 +132,7 @@ export function estimatePosition(
     const distance =
         markFloat === 0
             ? 0
-            : ((isLong ? markFloat - liqFloat : liqFloat - markFloat) /
-                  markFloat) *
-              100;
+            : ((isLong ? markFloat - liqFloat : liqFloat - markFloat) / markFloat) * 100;
 
     const maxWithdrawRaw =
         position.notional > 0n
@@ -155,43 +142,27 @@ export function estimatePosition(
     return {
         notional: formatToken(position.notional, decimals),
         tokens: formatToken(position.tokens, decimals),
-        positionValue: formatToken(
-            mulDivFloor(position.tokens, mark, SCALAR_18),
-            decimals,
-        ),
+        positionValue: formatToken(mulDivFloor(position.tokens, mark, SCALAR_18), decimals),
         margin: formatToken(position.margin, decimals),
         pnl: formatToken(pnlRaw, decimals),
         equity: formatToken(equityRaw, decimals),
         pendingFunding: formatToken(fundingRaw, decimals),
         pendingBorrowing: formatToken(borrowingRaw, decimals),
-        leverage:
-            equityRaw <= 0n ? 0 : Number(position.notional) / Number(equityRaw),
+        leverage: equityRaw <= 0n ? 0 : Number(position.notional) / Number(equityRaw),
         entryPrice: formatPrice(entryRaw),
         liquidationPrice: liqFloat,
         healthFactor:
             maintenanceRaw === 0n
                 ? Infinity
                 : Number(
-                      settledPositionEquity(
-                          position,
-                          data,
-                          config,
-                          p,
-                          market.vaultAssets,
-                          isLong,
-                      ),
+                      settledPositionEquity(position, data, config, p, market.vaultAssets, isLong),
                   ) / Number(maintenanceRaw),
         liquidationDistancePercent: distance,
         closeFee: formatToken(closeFeeRaw, decimals),
         netPnl: formatToken(netPnlRaw, decimals),
         netPnlPercent:
-            position.margin === 0n
-                ? 0
-                : (Number(netPnlRaw) / Number(position.margin)) * 100,
-        unlockedNotional: formatToken(
-            unlockedNotional(position, clock),
-            decimals,
-        ),
+            position.margin === 0n ? 0 : (Number(netPnlRaw) / Number(position.margin)) * 100,
+        unlockedNotional: formatToken(unlockedNotional(position, clock), decimals),
         maxWithdrawableMargin: formatTokenFloor(maxWithdrawRaw, decimals),
     };
 }

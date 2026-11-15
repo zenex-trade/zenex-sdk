@@ -224,12 +224,7 @@ describe('exact market architecture', () => {
             'vault.ts',
         ];
         const source = exactFiles
-            .map((filename) =>
-                readFileSync(
-                    `${repoRoot}/src/trading/internal/${filename}`,
-                    'utf8',
-                ),
-            )
+            .map((filename) => readFileSync(`${repoRoot}/src/trading/internal/${filename}`, 'utf8'))
             .join('\n');
 
         expect(source).not.toMatch(/\bNumber\s*\(/);

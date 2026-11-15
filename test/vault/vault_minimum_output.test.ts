@@ -11,9 +11,7 @@ const assumptions = [
     'minimum output is rounded down in atomic units',
 ];
 
-function derive(
-    overrides: Partial<DeriveVaultMinimumOutputInput> = {},
-) {
+function derive(overrides: Partial<DeriveVaultMinimumOutputInput> = {}) {
     return deriveVaultMinimumOutput({
         reference: {
             kind: 'estimate',
@@ -108,11 +106,7 @@ describe('deriveVaultMinimumOutput', () => {
             },
         ],
     ] as const)('rejects %s without inventing an estimate', (_label, input) => {
-        expect(
-            derive(
-                input as unknown as Partial<DeriveVaultMinimumOutputInput>,
-            ),
-        ).toMatchObject({
+        expect(derive(input as unknown as Partial<DeriveVaultMinimumOutputInput>)).toMatchObject({
             kind: 'unavailable',
             code: 'INVALID_INPUT',
         });

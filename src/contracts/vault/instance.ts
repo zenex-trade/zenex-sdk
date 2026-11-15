@@ -1,4 +1,5 @@
 import { xdr, scValToBigInt } from '@stellar/stellar-sdk';
+import { MarketStateError } from '../../entries.js';
 import { instanceStorage } from '../instance.js';
 
 /**
@@ -31,17 +32,18 @@ function extractMetaDecimals(val: xdr.ScVal): number | undefined {
     if (!map) return undefined;
     for (const item of map) {
         const key = item.key();
-        if (
-            key.switch() === xdr.ScValType.scvSymbol() &&
-            key.sym().toString() === 'decimals'
-        ) {
+        if (key.switch() === xdr.ScValType.scvSymbol() && key.sym().toString() === 'decimals') {
             return Number(scValToBigInt(item.val()));
         }
     }
     return undefined;
 }
 
-/** Throws unless `AssetAddress` and `Meta` are set. Both are constructor invariants. */
+/**
+ * Both `AssetAddress` and `Meta` are constructor invariants.
+ * @throws {MarketStateError} `MISSING_STATE` unless both are set and `Meta`
+ *   carries the share decimals.
+ */
 export function parseVaultInstance(instanceVal: xdr.ScVal): VaultInstanceState {
     const storage = instanceStorage(instanceVal, 'vault');
     // Asset first: it is the most informative thing to be missing, so it should
@@ -51,7 +53,7 @@ export function parseVaultInstance(instanceVal: xdr.ScVal): VaultInstanceState {
     const offset = storage.get('VirtualDecimalsOffset');
     const shareDecimals = extractMetaDecimals(storage.require('Meta'));
     if (shareDecimals === undefined) {
-        throw new Error('vault instance Meta is missing decimals');
+        throw new MarketStateError('MISSING_STATE', 'vault instance Meta is missing decimals');
     }
     const decimalsOffset = offset ? Number(scValToBigInt(offset)) : 0;
 

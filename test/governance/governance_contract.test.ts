@@ -22,7 +22,9 @@ describe('GovernanceContract', () => {
     });
 
     it('parsers has no upgrade entry', () => {
-        expect((GovernanceContract.parsers as unknown as Record<string, unknown>).upgrade).toBeUndefined();
+        expect(
+            (GovernanceContract.parsers as unknown as Record<string, unknown>).upgrade,
+        ).toBeUndefined();
     });
 
     it('contract spec has no upgrade function (matches the extracted v2 governance bindings)', () => {

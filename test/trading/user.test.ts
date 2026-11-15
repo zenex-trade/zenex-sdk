@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { rpc, xdr, StrKey, nativeToScVal } from '@stellar/stellar-sdk';
 import { MarketUser } from '../../src/trading/user.js';
+import { MarketPosition } from '../../src/trading/position.js';
 import { Market } from '../../src/trading/market.js';
 import { marketContext } from '../../src/trading/order.js';
 import { Price } from '../../src/trading/price.js';
@@ -32,13 +33,11 @@ import {
 import { linkedEntries } from './market_fixture.js';
 
 const MARKET = StrKey.encodeContract(Buffer.alloc(32, 1));
-const OTHER_MARKET = StrKey.encodeContract(Buffer.alloc(32, 9));
 const VAULT = StrKey.encodeContract(Buffer.alloc(32, 2));
 const TOKEN = StrKey.encodeContract(Buffer.alloc(32, 3));
 const ORACLE = StrKey.encodeContract(Buffer.alloc(32, 4));
 const TREASURY = StrKey.encodeContract(Buffer.alloc(32, 5));
 const USER = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 7));
-const USER_B = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 8));
 const RATE = 5n * 10n ** 16n;
 
 const network: Network = {
@@ -137,9 +136,7 @@ afterEach(() => {
 
 describe('MarketUser.load', () => {
     it('reads both sides, the counter and claimable credit in one call', async () => {
-        const spy = mockEntries(
-            userEntries(USER, { short: true, counter: 7, credit: 250n }),
-        );
+        const spy = mockEntries(userEntries(USER, { short: true, counter: 7, credit: 250n }));
         const user = await MarketUser.load(network, MARKET, USER);
 
         expect(spy).toHaveBeenCalledTimes(1);
@@ -282,16 +279,14 @@ describe('MarketUser.claimable', () => {
 
 describe('token balance', () => {
     function mockBalanceSim(amount: bigint) {
-        return vi
-            .spyOn(rpc.Server.prototype, 'simulateTransaction')
-            .mockResolvedValue({
-                latestLedger: 4242,
-                transactionData: {},
-                minResourceFee: '1',
-                result: { retval: nativeToScVal(amount, { type: 'i128' }), auth: [] },
-                events: [],
-                _parsed: true,
-            } as never);
+        return vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockResolvedValue({
+            latestLedger: 4242,
+            transactionData: {},
+            minResourceFee: '1',
+            result: { retval: nativeToScVal(amount, { type: 'i128' }), auth: [] },
+            events: [],
+            _parsed: true,
+        } as never);
     }
 
     // The property that matters: ONE path for every holder and every token.
@@ -307,18 +302,14 @@ describe('token balance', () => {
     it('reads a contract holder the same way, with no branch', async () => {
         const vaultHolder = StrKey.encodeContract(Buffer.alloc(32, 21));
         mockBalanceSim(4_248_930_129_558n);
-        expect(await loadTokenBalance(network, TOKEN, vaultHolder)).toBe(
-            4_248_930_129_558n,
-        );
+        expect(await loadTokenBalance(network, TOKEN, vaultHolder)).toBe(4_248_930_129_558n);
     });
 
     it('needs no classic Asset, so a share token works too', async () => {
         // The vault's share token is a pure-Soroban fungible with no
         // code/issuer; `getAssetBalance` could not address it at all.
         mockBalanceSim(4_995_000_000_000_000_000n);
-        expect(await loadTokenBalance(network, VAULT, USER)).toBe(
-            4_995_000_000_000_000_000n,
-        );
+        expect(await loadTokenBalance(network, VAULT, USER)).toBe(4_995_000_000_000_000_000n);
     });
 
     it('reads several tokens for one holder, in request order', async () => {
@@ -328,7 +319,10 @@ describe('token balance', () => {
             async () =>
                 ({
                     latestLedger: 4242,
-                    result: { retval: nativeToScVal(++call === 1 ? 42n : 7n, { type: 'i128' }), auth: [] },
+                    result: {
+                        retval: nativeToScVal(++call === 1 ? 42n : 7n, { type: 'i128' }),
+                        auth: [],
+                    },
                     _parsed: true,
                 }) as never,
         );
@@ -341,9 +335,7 @@ describe('token balance', () => {
             error: 'boom',
             _parsed: true,
         } as never);
-        await expect(loadTokenBalance(network, TOKEN, USER)).rejects.toThrow(
-            /Simulation failed/,
-        );
+        await expect(loadTokenBalance(network, TOKEN, USER)).rejects.toThrow(/Simulation failed/);
     });
 });
 
@@ -357,19 +349,14 @@ describe('loadTreasuryRate', () => {
     });
 
     it('reads an absent Rate key as the contract default of zero', async () => {
-        mockEntries([
-            ledgerEntryFor(contractInstanceLedgerKey(TREASURY), treasuryInstanceScVal()),
-        ]);
+        mockEntries([ledgerEntryFor(contractInstanceLedgerKey(TREASURY), treasuryInstanceScVal())]);
         expect(await loadTreasuryRate(network, TREASURY)).toBe(0n);
     });
 
     it('reads the owner from the same key, with no extra call', async () => {
         const owner = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 4));
         const spy = mockEntries([
-            ledgerEntryFor(
-                contractInstanceLedgerKey(TREASURY),
-                treasuryInstanceScVal(RATE, owner),
-            ),
+            ledgerEntryFor(contractInstanceLedgerKey(TREASURY), treasuryInstanceScVal(RATE, owner)),
         ]);
         const state = await loadTreasuryInstance(network, TREASURY);
         expect(state).toEqual({ rate: RATE, owner });
@@ -404,12 +391,7 @@ describe('archived user entries', () => {
         expect(user.short.notional).toBe(1000n);
         expect(user.orderCounter).toBe(7);
         expect(user.claimableCredit).toBe(250n);
-        expect(user.archived).toEqual([
-            'long',
-            'short',
-            'orderCounter',
-            'claimableCredit',
-        ]);
+        expect(user.archived).toEqual(['long', 'short', 'orderCounter', 'claimableCredit']);
     });
 
     it('lists only the archived rows', async () => {
@@ -460,15 +442,23 @@ describe('archived user entries', () => {
             ...market.slice(1),
             ...userEntries(USER, { counter: 3 }),
         ]);
-        await expect(
-            Market.loadWithUser(network, contracts, USER),
-        ).rejects.toMatchObject({ code: 'MISSING_STATE' });
+        await expect(Market.loadWithUser(network, contracts, USER)).rejects.toMatchObject({
+            code: 'MISSING_STATE',
+        });
     });
 });
 
 describe('MarketUser.loadOrders', () => {
     // Only the counter matters to the probe window.
-    const user = new MarketUser(MARKET, USER, null as never, null as never, 4, 0n);
+    const fields = {
+        marketId: MARKET,
+        userId: USER,
+        long: MarketPosition.zero(true),
+        short: MarketPosition.zero(false),
+        orderCounter: 4,
+        claimableCredit: 0n,
+    };
+    const user = new MarketUser(fields);
 
     it('returns live trade and vault orders, flagging an archived one', async () => {
         const spy = mockEntries([
@@ -496,8 +486,95 @@ describe('MarketUser.loadOrders', () => {
     it('makes no request for a zero lookback or an empty counter', async () => {
         const spy = mockEntries([]);
         expect(await user.loadOrders(network, 0)).toEqual([]);
-        const fresh = new MarketUser(MARKET, USER, null as never, null as never, 0, 0n);
+        const fresh = new MarketUser({ ...fields, orderCounter: 0 });
         expect(await fresh.loadOrders(network)).toEqual([]);
         expect(spy).not.toHaveBeenCalled();
+    });
+});
+
+describe('MarketUser constructor (one fields object)', () => {
+    const fields = {
+        marketId: MARKET,
+        userId: USER,
+        long: MarketPosition.zero(true),
+        short: MarketPosition.zero(false),
+        orderCounter: 7,
+        claimableCredit: 5n,
+    };
+
+    it('builds a user from named fields', () => {
+        const user = new MarketUser(fields);
+        expect(user.marketId).toBe(MARKET);
+        expect(user.userId).toBe(USER);
+        expect(user.long).toBe(fields.long);
+        expect(user.short).toBe(fields.short);
+        expect(user.orderCounter).toBe(7);
+        expect(user.claimableCredit).toBe(5n);
+        // `archived` defaults to none.
+        expect(user.archived).toEqual([]);
+        expect(Object.keys(user).sort()).toEqual([
+            'archived',
+            'claimableCredit',
+            'long',
+            'marketId',
+            'orderCounter',
+            'short',
+            'userId',
+        ]);
+    });
+
+    it('keeps its own frozen copy of the archived list', () => {
+        const archived: ('long' | 'short')[] = ['long'];
+        const user = new MarketUser({ ...fields, archived });
+        archived.push('short');
+        expect(user.archived).toEqual(['long']);
+        expect(Object.isFrozen(user.archived)).toBe(true);
+    });
+
+    it('derives a changed copy by spreading a user', () => {
+        const user = new MarketUser({ ...fields, archived: ['short'] });
+        const next = new MarketUser({ ...user, claimableCredit: 0n });
+        expect(next).toBeInstanceOf(MarketUser);
+        expect(next.claimableCredit).toBe(0n);
+        expect(next.archived).toEqual(['short']);
+        expect(user.claimableCredit).toBe(5n);
+    });
+
+    it('rejects a position on the wrong side', () => {
+        const long = MarketPosition.zero(true);
+        const short = MarketPosition.zero(false);
+        expect(() => new MarketUser({ ...fields, long: short })).toThrow(TypeError);
+        expect(() => new MarketUser({ ...fields, long: short })).toThrow(
+            "new MarketUser() field 'long' must be a long position (isLong: true)",
+        );
+        expect(() => new MarketUser({ ...fields, short: long })).toThrow(
+            "new MarketUser() field 'short' must be a short position (isLong: false)",
+        );
+        // Swapped, each is wrong, and the long one is reported first.
+        expect(() => new MarketUser({ ...fields, long: short, short: long })).toThrow(/'long'/);
+    });
+
+    it('names the first missing required field', () => {
+        const untyped = MarketUser as unknown as new (fields: object) => MarketUser;
+        const { short: _short, claimableCredit: _credit, ...rest } = fields;
+        expect(() => new untyped(rest)).toThrow(TypeError);
+        expect(() => new untyped(rest)).toThrow(
+            "new MarketUser() is missing the required field 'short'",
+        );
+        expect(() => new untyped({})).toThrow(
+            "new MarketUser() is missing the required field 'marketId'",
+        );
+        // `archived` stays optional.
+        expect(new untyped({ ...fields, archived: undefined }).archived).toEqual([]);
+    });
+
+    it('rejects the positional arguments it took before 1.0.0', () => {
+        const positional = MarketUser as unknown as new (...args: unknown[]) => MarketUser;
+        expect(() => new positional(MARKET, USER, fields.long, fields.short, 7, 5n)).toThrow(
+            TypeError,
+        );
+        expect(() => new positional()).toThrow(/takes one fields object/);
+        // @ts-expect-error the fields object is the only argument.
+        expect(() => new MarketUser(MARKET, USER)).toThrow(TypeError);
     });
 });

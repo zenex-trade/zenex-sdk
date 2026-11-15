@@ -111,22 +111,13 @@ export { parseMarketInstance } from './contracts/market/index.js';
 // Each is a single ledger key holding every value below, including `Owner`.
 export { instanceStorage } from './contracts/instance.js';
 export type { InstanceStorage } from './contracts/instance.js';
-export {
-    parseOracleInstance,
-    type OracleInstanceState,
-} from './contracts/oracle/index.js';
-export {
-    parseFactoryInstance,
-    type FactoryInstanceState,
-} from './contracts/factory/index.js';
+export { parseOracleInstance, type OracleInstanceState } from './contracts/oracle/index.js';
+export { parseFactoryInstance, type FactoryInstanceState } from './contracts/factory/index.js';
 export {
     parseGovernanceInstance,
     type GovernanceInstanceState,
 } from './contracts/governance/index.js';
-export {
-    parseTreasuryInstance,
-    type TreasuryInstanceState,
-} from './contracts/treasury/index.js';
+export { parseTreasuryInstance, type TreasuryInstanceState } from './contracts/treasury/index.js';
 
 // =============================================================================
 // State reads (getLedgerEntries, one round trip each)
@@ -147,16 +138,9 @@ export {
     UNTYPED_FAILURE,
 } from './contracts/router/index.js';
 
-export type {
-    Call,
-    CallOutcome,
-    OrderParams,
-} from './contracts/router/index.js';
+export type { Call, CallOutcome, OrderParams } from './contracts/router/index.js';
 
-export {
-    FeeForwarderContract,
-    FeeForwarderEventType,
-} from './contracts/fee_forwarder/index.js';
+export { FeeForwarderContract, FeeForwarderEventType } from './contracts/fee_forwarder/index.js';
 
 export type {
     ForwardTarget,
@@ -185,10 +169,7 @@ export type {
 // Governance Module (generic timelock)
 // =============================================================================
 
-export {
-    GovernanceContract,
-    GovernanceEventType,
-} from './contracts/governance/index.js';
+export { GovernanceContract, GovernanceEventType } from './contracts/governance/index.js';
 
 export type {
     QueuedCall,
@@ -244,8 +225,6 @@ export {
     VIRTUAL_SHARES,
 } from './contracts/vault/index.js';
 
-
-
 export type {
     VaultConstructorArgs,
     VaultInstanceState,
@@ -269,7 +248,9 @@ export {
     parseError,
     parseResult,
 } from './response_parser.js';
-export { parseContractErrorCode } from './errors.js';
+export { parseContractErrorCode, VerifierErrorCode } from './errors.js';
+export { inferErrorSource } from './error_source.js';
+export type { ZenexErrorSource } from './errors.js';
 
 // =============================================================================
 // Ledger Keys (direct storage reads)

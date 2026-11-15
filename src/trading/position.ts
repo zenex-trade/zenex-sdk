@@ -8,6 +8,7 @@ import type { PositionEstimate } from './position_est.js';
 import { estimatePosition } from './position_est.js';
 import type { PriceInput } from './price.js';
 import { marketPrice, quoteTime, resolvePrice, wallClock } from './price.js';
+import { requireFields } from './internal/fields.js';
 import { exitPrice } from './internal/math.js';
 import {
     impliedEntryPrice,
@@ -21,51 +22,145 @@ import {
 } from './internal/position.js';
 
 /**
+ * The fields of a {@link MarketPosition}, as its constructor takes them: a
+ * stored position row plus the side it was stored under. Derive a changed
+ * copy by spreading a position: `new MarketPosition({ ...position, margin })`.
+ */
+export interface MarketPositionFields {
+    /** The side this row was stored under. */
+    readonly isLong: boolean;
+    /** Posted margin, token-dec. */
+    readonly margin: bigint;
+    /** Open size, token-dec. Zero means no open position. */
+    readonly notional: bigint;
+    /** Base size, token-dec. */
+    readonly tokens: bigint;
+    /** Funding index snapshot at the last change. */
+    readonly fundingIdx: bigint;
+    /** Borrowing index snapshot at the last change. */
+    readonly borrowingIdx: bigint;
+    /** Notional under the decrease lock, token-dec. */
+    readonly lockedNotional: bigint;
+    /** Unix seconds the decrease lock lapses at. */
+    readonly unlocksAt: bigint;
+    /** Unix seconds of the last pricing touch. */
+    readonly pricedAt: bigint;
+    /** Ids of pending decrease orders riding this side. */
+    readonly decreaseOrders: readonly number[];
+}
+
+/** The fields `new MarketPosition()` cannot do without: all of them, in declaration order. */
+const REQUIRED_FIELDS = [
+    'isLong',
+    'margin',
+    'notional',
+    'tokens',
+    'fundingIdx',
+    'borrowingIdx',
+    'lockedNotional',
+    'unlocksAt',
+    'pricedAt',
+    'decreaseOrders',
+] as const satisfies readonly (keyof MarketPositionFields)[];
+
+/**
  * One stored position that knows its side. `MarketUser.load` stamps `isLong`
  * from the storage key it read, so the methods never ask for it. All exact
- * bigints; the float view of the same numbers is `PositionEstimate`.
+ * bigints; the float view of the same numbers is `PositionEstimate`. Plain
+ * readonly fields, with its own copy of `decreaseOrders`.
  *
  * Methods that take a `market` measure against it as passed. Accrue first
  * (`market.accrue(price)`) when you want fill-grade numbers.
+ *
+ * Build one with {@link MarketPosition.from} from a stored row, with
+ * {@link MarketPosition.zero} for an empty side, or from its fields with
+ * `new MarketPosition({ ... })`.
  */
-export class MarketPosition {
-    constructor(
-        /** The side this row was stored under. */
-        public isLong: boolean,
-        /** Posted margin, token-dec. */
-        public margin: bigint,
-        /** Open size, token-dec. Zero means no open position. */
-        public notional: bigint,
-        /** Base size, token-dec. */
-        public tokens: bigint,
-        /** Funding index snapshot at the last change. */
-        public fundingIdx: bigint,
-        /** Borrowing index snapshot at the last change. */
-        public borrowingIdx: bigint,
-        /** Notional under the decrease lock, token-dec. */
-        public lockedNotional: bigint,
-        /** Unix seconds the decrease lock lapses at. */
-        public unlocksAt: bigint,
-        /** Unix seconds of the last pricing touch. */
-        public pricedAt: bigint,
-        /** Ids of pending decrease orders riding this side. */
-        public decreaseOrders: number[],
-    ) {}
+export class MarketPosition implements MarketPositionFields {
+    /** The side this row was stored under. */
+    readonly isLong: boolean;
+    /** Posted margin, token-dec. */
+    readonly margin: bigint;
+    /** Open size, token-dec. Zero means no open position. */
+    readonly notional: bigint;
+    /** Base size, token-dec. */
+    readonly tokens: bigint;
+    /** Funding index snapshot at the last change. */
+    readonly fundingIdx: bigint;
+    /** Borrowing index snapshot at the last change. */
+    readonly borrowingIdx: bigint;
+    /** Notional under the decrease lock, token-dec. */
+    readonly lockedNotional: bigint;
+    /** Unix seconds the decrease lock lapses at. */
+    readonly unlocksAt: bigint;
+    /** Unix seconds of the last pricing touch. */
+    readonly pricedAt: bigint;
+    /** Ids of pending decrease orders riding this side. The position's own frozen copy of the list. */
+    readonly decreaseOrders: readonly number[];
+
+    /**
+     * Build a position from its fields. `decreaseOrders` is copied and the
+     * copy frozen.
+     * @throws {TypeError} if called without a fields object, such as with
+     *   the positional arguments it took before 1.0.0, or with a field
+     *   missing; the message names the first one.
+     */
+    constructor(fields: MarketPositionFields) {
+        requireFields(
+            'MarketPosition',
+            'new MarketPosition({ isLong, margin, ... })',
+            fields,
+            REQUIRED_FIELDS,
+        );
+        this.isLong = fields.isLong;
+        this.margin = fields.margin;
+        this.notional = fields.notional;
+        this.tokens = fields.tokens;
+        this.fundingIdx = fields.fundingIdx;
+        this.borrowingIdx = fields.borrowingIdx;
+        this.lockedNotional = fields.lockedNotional;
+        this.unlocksAt = fields.unlocksAt;
+        this.pricedAt = fields.pricedAt;
+        // The position owns its list, a frozen copy: a later write to the
+        // caller's array cannot change it, and a write to the list itself
+        // throws.
+        this.decreaseOrders = Object.freeze([...fields.decreaseOrders]);
+    }
 
     /** Wrap a parsed storage row (e.g. from an indexer) with its side. */
     static from(row: Position, isLong: boolean): MarketPosition {
-        return new MarketPosition(
+        return new MarketPosition({
             isLong,
-            row.margin,
-            row.notional,
-            row.tokens,
-            row.fundingIdx,
-            row.borrowingIdx,
-            row.lockedNotional,
-            row.unlocksAt,
-            row.pricedAt,
-            [...row.decreaseOrders],
-        );
+            margin: row.margin,
+            notional: row.notional,
+            tokens: row.tokens,
+            fundingIdx: row.fundingIdx,
+            borrowingIdx: row.borrowingIdx,
+            lockedNotional: row.lockedNotional,
+            unlocksAt: row.unlocksAt,
+            pricedAt: row.pricedAt,
+            decreaseOrders: row.decreaseOrders,
+        });
+    }
+
+    /**
+     * A side with no position: every amount zero and no pending decrease
+     * orders, as the contract's `Position::zeroed`. What a never-opened side
+     * loads as, and the position to preview a first open against.
+     */
+    static zero(isLong: boolean): MarketPosition {
+        return new MarketPosition({
+            isLong,
+            margin: 0n,
+            notional: 0n,
+            tokens: 0n,
+            fundingIdx: 0n,
+            borrowingIdx: 0n,
+            lockedNotional: 0n,
+            unlocksAt: 0n,
+            pricedAt: 0n,
+            decreaseOrders: [],
+        });
     }
 
     /** Whether this side carries any size. */
@@ -85,10 +180,7 @@ export class MarketPosition {
      * settled equity, which nets both, so use `isLiquidatable` for the gate.
      */
     equity(market: Market, price: PriceInput): bigint {
-        const mark = exitPrice(
-            marketPrice(market, price, quoteTime(market)),
-            this.isLong,
-        );
+        const mark = exitPrice(marketPrice(market, price, quoteTime(market)), this.isLong);
         return positionEquity(this, market.data, mark, SCALAR_18, this.isLong);
     }
 
@@ -112,11 +204,7 @@ export class MarketPosition {
 
     /** The margin the maintenance requirement demands, token-dec, rounded up as the contract rounds. */
     maintenanceMargin(market: Market): bigint {
-        return mulDivCeil(
-            this.notional,
-            market.config.maintenanceMargin,
-            SCALAR_18,
-        );
+        return mulDivCeil(this.notional, market.config.maintenanceMargin, SCALAR_18);
     }
 
     /**
@@ -167,12 +255,7 @@ export class MarketPosition {
     }
 
     /** Pre-flight `order` against this position at `price`. Delegates to {@link previewOrder}. */
-    preview(
-        market: Market,
-        order: OrderParams,
-        price: PriceInput,
-        now?: bigint,
-    ): OrderEstimate {
+    preview(market: Market, order: OrderParams, price: PriceInput, now?: bigint): OrderEstimate {
         return previewOrder(market, this, order, price, now);
     }
 }

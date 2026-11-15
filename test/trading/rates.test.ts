@@ -6,11 +6,7 @@ import {
     advanceMarketAccruals,
 } from '../../src/trading/internal/math.js';
 import type { PriceData } from '../../src/trading/internal/math.js';
-import type {
-    MarketData,
-    SidePair,
-    MarketConfig,
-} from '../../src/contracts/market/types.js';
+import type { MarketData, SidePair, MarketConfig } from '../../src/contracts/market/types.js';
 
 function pair(long = 0n, short = 0n): SidePair {
     return { long, short };
@@ -227,11 +223,14 @@ describe('coherent market accrual ordering and chronology', () => {
     it('rejects any quote timestamp before the stored accrual clock', () => {
         const data = market({ accruedAt: 20n });
 
-        expect(() => advanceBorrowing(data, config(), price(), 1_000n, -1n))
-            .toThrowError(new RangeError('quote timestamp predates stored accrual'));
-        expect(() => advanceFunding(data, config(), -1n))
-            .toThrowError(new RangeError('quote timestamp predates stored accrual'));
-        expect(() => advanceMarketAccruals(data, config(), price(), 1_000n, 15n))
-            .toThrowError(new RangeError('quote timestamp predates stored accrual'));
+        expect(() => advanceBorrowing(data, config(), price(), 1_000n, -1n)).toThrowError(
+            new RangeError('quote timestamp predates stored accrual'),
+        );
+        expect(() => advanceFunding(data, config(), -1n)).toThrowError(
+            new RangeError('quote timestamp predates stored accrual'),
+        );
+        expect(() => advanceMarketAccruals(data, config(), price(), 1_000n, 15n)).toThrowError(
+            new RangeError('quote timestamp predates stored accrual'),
+        );
     });
 });

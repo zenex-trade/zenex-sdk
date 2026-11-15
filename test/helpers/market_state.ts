@@ -1,9 +1,6 @@
 import { Address, nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { SCALAR_18 } from '../../src/math/index.js';
-import {
-    marketConfigToScVal,
-    type MarketConfig,
-} from '../../src/contracts/market/types.js';
+import { marketConfigToScVal, type MarketConfig } from '../../src/contracts/market/types.js';
 
 // =============================================================================
 // Test builders for contract-instance / persistent ledger-entry values, shared
@@ -16,14 +13,12 @@ import {
 const i128 = (v: bigint) => nativeToScVal(v, { type: 'i128' });
 const u64 = (v: bigint) => nativeToScVal(v, { type: 'u64' });
 const sym = (s: string) => xdr.ScVal.scvSymbol(s);
-export const mapEntry = (k: string, v: xdr.ScVal) =>
-    new xdr.ScMapEntry({ key: sym(k), val: v });
+export const mapEntry = (k: string, v: xdr.ScVal) => new xdr.ScMapEntry({ key: sym(k), val: v });
 const sidePair = (long: bigint, short: bigint) =>
     xdr.ScVal.scvMap([mapEntry('long', i128(long)), mapEntry('short', i128(short))]);
 
 /** A `#[contracttype]` enum unit-variant storage KEY: `Vec[Symbol(name)]`. */
-export const unitKey = (name: string): xdr.ScVal =>
-    xdr.ScVal.scvVec([sym(name)]);
+export const unitKey = (name: string): xdr.ScVal => xdr.ScVal.scvVec([sym(name)]);
 
 export function makeConfig(): MarketConfig {
     return {
@@ -84,10 +79,7 @@ export function positionScVal(): xdr.ScVal {
     return xdr.ScVal.scvMap([
         mapEntry('borrowing_idx', i128(0n)),
         mapEntry('margin', i128(100n)),
-        mapEntry(
-            'decrease_orders',
-            xdr.ScVal.scvVec([xdr.ScVal.scvU32(3), xdr.ScVal.scvU32(7)]),
-        ),
+        mapEntry('decrease_orders', xdr.ScVal.scvVec([xdr.ScVal.scvU32(3), xdr.ScVal.scvU32(7)])),
         mapEntry('funding_idx', i128(0n)),
         mapEntry('locked_notional', i128(200n)),
         mapEntry('notional', i128(1000n)),
@@ -138,7 +130,10 @@ export function marketInstanceScVal(options: MarketInstanceOptions): xdr.ScVal {
     const addr = (id: string) => Address.fromString(id).toScVal();
     const storage: xdr.ScMapEntry[] = [
         new xdr.ScMapEntry({ key: unitKey('Config'), val: marketConfigToScVal(makeConfig()) }),
-        new xdr.ScMapEntry({ key: unitKey('FeedId'), val: xdr.ScVal.scvBytes(options.feedId ?? TEST_FEED_ID) }),
+        new xdr.ScMapEntry({
+            key: unitKey('FeedId'),
+            val: xdr.ScVal.scvBytes(options.feedId ?? TEST_FEED_ID),
+        }),
         new xdr.ScMapEntry({ key: unitKey('Status'), val: xdr.ScVal.scvU32(options.status ?? 0) }),
         new xdr.ScMapEntry({ key: unitKey('Vault'), val: addr(options.vault) }),
         new xdr.ScMapEntry({ key: unitKey('Token'), val: addr(options.token) }),
@@ -146,13 +141,22 @@ export function marketInstanceScVal(options: MarketInstanceOptions): xdr.ScVal {
         new xdr.ScMapEntry({ key: unitKey('Treasury'), val: addr(options.treasury) }),
     ];
     if (options.delistedAt !== undefined) {
-        storage.push(new xdr.ScMapEntry({ key: unitKey('DelistedAt'), val: u64(options.delistedAt) }));
+        storage.push(
+            new xdr.ScMapEntry({ key: unitKey('DelistedAt'), val: u64(options.delistedAt) }),
+        );
     }
     if (options.terminalPrice !== undefined) {
-        storage.push(new xdr.ScMapEntry({ key: unitKey('TerminalPrice'), val: i128(options.terminalPrice) }));
+        storage.push(
+            new xdr.ScMapEntry({ key: unitKey('TerminalPrice'), val: i128(options.terminalPrice) }),
+        );
     }
     if (options.adl !== undefined) {
-        storage.push(new xdr.ScMapEntry({ key: unitKey('Adl'), val: adlScVal(options.adl[0], options.adl[1]) }));
+        storage.push(
+            new xdr.ScMapEntry({
+                key: unitKey('Adl'),
+                val: adlScVal(options.adl[0], options.adl[1]),
+            }),
+        );
     }
     if (options.withOwner !== undefined) {
         storage.push(new xdr.ScMapEntry({ key: unitKey('Owner'), val: addr(options.withOwner) }));
@@ -175,13 +179,24 @@ export function vaultInstanceScVal(options: VaultInstanceOptions): xdr.ScVal {
         mapEntry('symbol', xdr.ScVal.scvString('zTKN')),
     ]);
     const storage: xdr.ScMapEntry[] = [
-        new xdr.ScMapEntry({ key: unitKey('AssetAddress'), val: Address.fromString(options.asset).toScVal() }),
+        new xdr.ScMapEntry({
+            key: unitKey('AssetAddress'),
+            val: Address.fromString(options.asset).toScVal(),
+        }),
         new xdr.ScMapEntry({ key: unitKey('Meta'), val: metaMap }),
         new xdr.ScMapEntry({ key: unitKey('TotalSupply'), val: i128(options.totalSupply ?? 0n) }),
-        new xdr.ScMapEntry({ key: unitKey('VirtualDecimalsOffset'), val: xdr.ScVal.scvU32(options.decimalsOffset ?? 1) }),
+        new xdr.ScMapEntry({
+            key: unitKey('VirtualDecimalsOffset'),
+            val: xdr.ScVal.scvU32(options.decimalsOffset ?? 1),
+        }),
     ];
     if (options.strategy !== undefined) {
-        storage.push(new xdr.ScMapEntry({ key: unitKey('Strategy'), val: Address.fromString(options.strategy).toScVal() }));
+        storage.push(
+            new xdr.ScMapEntry({
+                key: unitKey('Strategy'),
+                val: Address.fromString(options.strategy).toScVal(),
+            }),
+        );
     }
     return contractInstance(storage);
 }
@@ -219,11 +234,7 @@ export function balanceMapScVal(amount: bigint): xdr.ScVal {
  * `liveUntilLedgerSeq` defaults far past the mocked `latestLedger` (a live
  * entry); pass an explicit value to model an expired-but-not-yet-evicted one.
  */
-export function ledgerEntryFor(
-    key: xdr.LedgerKey,
-    val: xdr.ScVal,
-    liveUntilLedgerSeq = 1_000_000,
-) {
+export function ledgerEntryFor(key: xdr.LedgerKey, val: xdr.ScVal, liveUntilLedgerSeq = 1_000_000) {
     const cd = key.contractData();
     return {
         lastModifiedLedgerSeq: 1,

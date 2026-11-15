@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { xdr, scValToNative, StrKey } from '@stellar/stellar-sdk';
-import { TreasuryContract, TreasuryConstructorArgs } from '../../src/contracts/treasury/contract.js';
+import {
+    TreasuryContract,
+    TreasuryConstructorArgs,
+} from '../../src/contracts/treasury/contract.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 1));
 const OWNER = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 2));
@@ -32,7 +35,11 @@ describe('TreasuryContract', () => {
         const args: TreasuryConstructorArgs = { owner: OWNER, rate: 100_000_000_000_000_000n };
         const op = TreasuryContract.deploy(OWNER, Buffer.alloc(32, 9), args, undefined, 'hex');
         const decoded = xdr.Operation.fromXDR(op, 'base64');
-        const createContract = decoded.body().invokeHostFunctionOp().hostFunction().createContractV2();
+        const createContract = decoded
+            .body()
+            .invokeHostFunctionOp()
+            .hostFunction()
+            .createContractV2();
         const native = createContract.constructorArgs().map((a) => scValToNative(a));
         expect(native).toEqual([OWNER, 100_000_000_000_000_000n]);
     });

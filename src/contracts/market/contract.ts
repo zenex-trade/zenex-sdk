@@ -1,12 +1,31 @@
 import { marketSpec } from '../contract_specs.js';
-import { Address, Contract, contract, xdr, nativeToScVal, scValToNative, Operation } from '@stellar/stellar-sdk';
+import {
+    Address,
+    Contract,
+    contract,
+    xdr,
+    nativeToScVal,
+    scValToNative,
+    Operation,
+} from '@stellar/stellar-sdk';
 import { i128, u32, u64 } from '../../index.js';
 import type { Call } from '../router/types.js';
 import {
-    OrderKind, VaultOrderKind, MarketConfig,
-    Order, VaultOrder, Position, MarketData, AdlState,
+    OrderKind,
+    VaultOrderKind,
+    MarketConfig,
+    Order,
+    VaultOrder,
+    Position,
+    MarketData,
+    AdlState,
     marketConfigToScVal,
-    parseOrder, parseVaultOrder, parsePosition, parseMarketData, parseAdlState, parseMarketConfig,
+    parseOrder,
+    parseVaultOrder,
+    parsePosition,
+    parseMarketData,
+    parseAdlState,
+    parseMarketConfig,
 } from './types.js';
 import { Buffer } from 'buffer';
 
@@ -66,22 +85,17 @@ export class MarketContract extends Contract {
         acceptOwnership: () => {},
         renounceOwnership: () => {},
         // --- trader / keeper (numeric) ---
-        createOrder: (result: string): u32 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        cancelOrder: (result: string): i128 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        createOrder: (result: string): u32 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        cancelOrder: (result: string): i128 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         createVaultOrder: (result: string): u32 =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         cancelVaultOrder: (result: string): i128 =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        claimCredit: (result: string): i128 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        executeOrder: (result: string): i128 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        claimCredit: (result: string): i128 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        executeOrder: (result: string): i128 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         executeLiquidation: (result: string): i128 =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        executeAdl: (result: string): i128 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        executeAdl: (result: string): i128 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         executeVaultOrder: (result: string): i128 =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         getClaimableCredit: (result: string): i128 =>
@@ -108,22 +122,16 @@ export class MarketContract extends Contract {
         getConfig: (result: string): MarketConfig =>
             parseMarketConfig(scValToNative(xdr.ScVal.fromXDR(result, 'base64'))),
         // --- plain scalar / address / tuple views (passthrough) ---
-        getStatus: (result: string): u32 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        getStatus: (result: string): u32 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         getOrderCounter: (result: string): u32 =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        getToken: (result: string): string =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        getVault: (result: string): string =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        getTreasury: (result: string): string =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
-        getOracle: (result: string): string =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        getToken: (result: string): string => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        getVault: (result: string): string => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        getTreasury: (result: string): string => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        getOracle: (result: string): string => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         getRetirement: (result: string): [i128, u64] | undefined =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')) ?? undefined,
-        getFeed: (result: string): Buffer =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        getFeed: (result: string): Buffer => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
     };
 
     /**
@@ -145,13 +153,11 @@ export class MarketContract extends Contract {
         wasmHash: Buffer | string,
         args: DeployArgs,
         salt?: Buffer,
-        format: 'hex' | 'base64' = 'hex'
+        format: 'hex' | 'base64' = 'hex',
     ): string {
         return Operation.createCustomContract({
             address: Address.fromString(deployer),
-            wasmHash: typeof wasmHash === 'string'
-                ? Buffer.from(wasmHash, format)
-                : wasmHash,
+            wasmHash: typeof wasmHash === 'string' ? Buffer.from(wasmHash, format) : wasmHash,
             salt,
             constructorArgs: [
                 Address.fromString(args.owner).toScVal(),
@@ -186,10 +192,7 @@ export class MarketContract extends Contract {
      *   without a same-ledger accrual on a market that is not `Frozen`.
      */
     setConfig(config: MarketConfig): string {
-        return this.call(
-            'set_config',
-            marketConfigToScVal(config),
-        ).toXDR('base64');
+        return this.call('set_config', marketConfigToScVal(config)).toXDR('base64');
     }
 
     /**
@@ -203,10 +206,7 @@ export class MarketContract extends Contract {
      * - MarketNotCleared (706) on `Status::Retired` while any position remains open.
      */
     setStatus(status: u32): string {
-        return this.call(
-            'set_status',
-            xdr.ScVal.scvU32(status),
-        ).toXDR('base64');
+        return this.call('set_status', xdr.ScVal.scvU32(status)).toXDR('base64');
     }
 
     /**
@@ -223,10 +223,9 @@ export class MarketContract extends Contract {
      * - InvalidPrice (701) if `price` <= 0.
      */
     setTerminalPrice(price: i128): string {
-        return this.call(
-            'set_terminal_price',
-            nativeToScVal(price, { type: 'i128' }),
-        ).toXDR('base64');
+        return this.call('set_terminal_price', nativeToScVal(price, { type: 'i128' })).toXDR(
+            'base64',
+        );
     }
 
     // ============================================================
@@ -283,7 +282,14 @@ export class MarketContract extends Contract {
         expiration: u32,
     ): string {
         const call = this.createOrderCall(
-            user, isLong, kind, notional, margin, triggerPrice, priceBound, expiration,
+            user,
+            isLong,
+            kind,
+            notional,
+            margin,
+            triggerPrice,
+            priceBound,
+            expiration,
         );
         return this.call(call.func, ...call.args).toXDR('base64');
     }
@@ -353,10 +359,7 @@ export class MarketContract extends Contract {
         return {
             contract: this.contractId(),
             func: 'cancel_order',
-            args: [
-                Address.fromString(user).toScVal(),
-                xdr.ScVal.scvU32(id),
-            ],
+            args: [Address.fromString(user).toScVal(), xdr.ScVal.scvU32(id)],
         };
     }
 
@@ -447,10 +450,7 @@ export class MarketContract extends Contract {
         return {
             contract: this.contractId(),
             func: 'cancel_vault_order',
-            args: [
-                Address.fromString(user).toScVal(),
-                xdr.ScVal.scvU32(id),
-            ],
+            args: [Address.fromString(user).toScVal(), xdr.ScVal.scvU32(id)],
         };
     }
 
@@ -472,10 +472,7 @@ export class MarketContract extends Contract {
      *   holds nothing to pay it with.
      */
     claimCredit(user: string): string {
-        return this.call(
-            'claim_credit',
-            Address.fromString(user).toScVal(),
-        ).toXDR('base64');
+        return this.call('claim_credit', Address.fromString(user).toScVal()).toXDR('base64');
     }
 
     // ============================================================
@@ -558,7 +555,12 @@ export class MarketContract extends Contract {
      *   and the delist deadline has not passed.
      * - VaultInsolvent (755) if the settlement's vault draw exceeds the vault balance.
      */
-    executeLiquidation(keeper: string, user: string, isLong: boolean, price: Buffer | Uint8Array): string {
+    executeLiquidation(
+        keeper: string,
+        user: string,
+        isLong: boolean,
+        price: Buffer | Uint8Array,
+    ): string {
         return this.call(
             'execute_liquidation',
             Address.fromString(keeper).toScVal(),
@@ -590,10 +592,9 @@ export class MarketContract extends Contract {
      * - MarketFrozen (704) if the market status is `Frozen` or `Retired`.
      */
     updateAdlState(price: Buffer | Uint8Array): string {
-        return this.call(
-            'update_adl_state',
-            xdr.ScVal.scvBytes(priceBuffer(price)),
-        ).toXDR('base64');
+        return this.call('update_adl_state', xdr.ScVal.scvBytes(priceBuffer(price))).toXDR(
+            'base64',
+        );
     }
 
     /**
@@ -637,7 +638,13 @@ export class MarketContract extends Contract {
      * - AdlOvershoot (771) if the close lands the side under the clear
      *   allowance re-measured on the settled vault balance.
      */
-    executeAdl(keeper: string, user: string, isLong: boolean, amount: i128, price: Buffer | Uint8Array): string {
+    executeAdl(
+        keeper: string,
+        user: string,
+        isLong: boolean,
+        amount: i128,
+        price: Buffer | Uint8Array,
+    ): string {
         return this.call(
             'execute_adl',
             Address.fromString(keeper).toScVal(),
@@ -726,10 +733,7 @@ export class MarketContract extends Contract {
      * - MarketFrozen (704) if the market status is `Frozen` or `Retired`.
      */
     accrue(price: Buffer | Uint8Array): string {
-        return this.call(
-            'accrue',
-            xdr.ScVal.scvBytes(priceBuffer(price)),
-        ).toXDR('base64');
+        return this.call('accrue', xdr.ScVal.scvBytes(priceBuffer(price))).toXDR('base64');
     }
 
     // ============================================================
@@ -809,10 +813,7 @@ export class MarketContract extends Contract {
      *   shared between trade and vault orders (`1` means none allocated yet).
      */
     getOrderCounter(user: string): string {
-        return this.call(
-            'get_order_counter',
-            Address.fromString(user).toScVal(),
-        ).toXDR('base64');
+        return this.call('get_order_counter', Address.fromString(user).toScVal()).toXDR('base64');
     }
 
     /** Read the ADL state, zeroed until the first recompute. */
@@ -829,10 +830,9 @@ export class MarketContract extends Contract {
      *   pool holds, so `claimCredit` can pay less than this balance.
      */
     getClaimableCredit(user: string): string {
-        return this.call(
-            'get_claimable_credit',
-            Address.fromString(user).toScVal(),
-        ).toXDR('base64');
+        return this.call('get_claimable_credit', Address.fromString(user).toScVal()).toXDR(
+            'base64',
+        );
     }
 
     /** Read the settlement token address. */
@@ -878,7 +878,6 @@ export class MarketContract extends Contract {
     getFeed(): string {
         return this.call('get_feed').toXDR('base64');
     }
-
 
     // ============================================================
     // Upgrade

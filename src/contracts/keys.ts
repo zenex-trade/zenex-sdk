@@ -24,7 +24,9 @@ export function decodeEntryKey(entryKey: xdr.ScVal): string {
         case xdr.ScValType.scvVec():
             const vec = entryKey.vec();
             if (!vec || !vec.at(0)) {
-                throw Error('Invalid ledger entry key: vec or its first element is null or undefined');
+                throw Error(
+                    'Invalid ledger entry key: vec or its first element is null or undefined',
+                );
             }
             return vec.at(0)!.sym().toString();
         case xdr.ScValType.scvSymbol():
@@ -32,7 +34,9 @@ export function decodeEntryKey(entryKey: xdr.ScVal): string {
         case xdr.ScValType.scvLedgerKeyContractInstance():
             return 'ContractInstance';
         default:
-            throw Error(`Invalid ledger entry key type: should not contain type ${entryKey.switch()}`);
+            throw Error(
+                `Invalid ledger entry key type: should not contain type ${entryKey.switch()}`,
+            );
     }
 }
 
@@ -50,7 +54,7 @@ export function contractInstanceLedgerKey(contractId: string): xdr.LedgerKey {
             contract: Address.fromString(contractId).toScAddress(),
             key: xdr.ScVal.scvLedgerKeyContractInstance(),
             durability: xdr.ContractDataDurability.persistent(),
-        })
+        }),
     );
 }
 
@@ -68,7 +72,7 @@ export function persistentLedgerKey(contractId: string, keyVec: xdr.ScVal[]): xd
             contract: Address.fromString(contractId).toScAddress(),
             key: xdr.ScVal.scvVec(keyVec),
             durability: xdr.ContractDataDurability.persistent(),
-        })
+        }),
     );
 }
 
@@ -86,6 +90,6 @@ export function temporaryLedgerKey(contractId: string, keyVec: xdr.ScVal[]): xdr
             contract: Address.fromString(contractId).toScAddress(),
             key: xdr.ScVal.scvVec(keyVec),
             durability: xdr.ContractDataDurability.temporary(),
-        })
+        }),
     );
 }

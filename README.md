@@ -8,7 +8,8 @@ a preview that says an order fills, fills on chain with the same numbers.
 1.0.0 binds the mainnet contracts: the core release (market, strategy vault,
 factory, oracle, treasury, governance), which is
 [zenex-contracts](https://github.com/zenex-trade/zenex-contracts) v1.0.0, and
-the market router and fee forwarder from zenex-util-contracts v0.0.2.
+the market router and fee forwarder, which are the Zenex utility contracts
+v0.0.2. See [Versioning](#versioning).
 
 ## Install
 
@@ -24,6 +25,9 @@ npm install @zenex-trade/zenex-sdk @stellar/stellar-sdk@^16
 - ESM and CommonJS, each with its own type declarations.
   `@zenex-trade/zenex-sdk/errors` is a standalone, import-free error
   catalog.
+- The public API is the root export and `./errors`. Nothing else is
+  importable, and semver covers only those two (see
+  [Versioning](#versioning)).
 
 ## Conventions
 
@@ -67,16 +71,49 @@ On a market that is winding down it also holds `delistedAt` and, once set,
 if market-level state is absent or archived, `IDENTITY_MISMATCH` if an address
 you passed disagrees with the market's own wiring.
 
+A `Market` is an immutable snapshot with readonly fields, and it holds no
+network. To build one by hand, for a test or from indexed state, pass its
+fields as one object: `new Market({ id, ledger, config, data, treasuryRate,
+spreadReductionFactor, ... })`. Neither `treasuryRate` nor
+`spreadReductionFactor` has a default: a rate of 0 overstates a redeem quote,
+and a factor of 0 prices a report wider than a narrowing oracle fills it.
+Only `owner`, `terminalPrice` and `delistedAt` are optional, and a missing
+required field throws a `TypeError` that names it. Derive a changed copy by
+spreading: `new Market({ ...market, status })`.
+The nested `config`, `data` and `adl` are frozen copies, so a write to one of
+their fields throws, and the objects you passed in stay yours.
+
 A `MarketUser` holds both positions (`user.long`, `user.short`), the order
 counter, and claimable credit. After about 120 idle days a user's entries
 archive. They still load from the archived values and are listed in
 `user.archived`; the next transaction that touches them restores them.
 `user.loadOrders(network)` lists pending orders straight from the chain.
+`MarketUser.load(network, market.id, USER)` reads a user alone.
+
+Build a position from a stored row with `MarketPosition.from(row, isLong)`,
+or an empty side with `MarketPosition.zero(isLong)`. Like `Market`,
+`MarketPosition` and `MarketUser` have readonly fields and take them as one
+object, for a test or for state you indexed yourself:
+
+```ts
+import { MarketPosition, MarketUser } from '@zenex-trade/zenex-sdk';
+
+const position = new MarketPosition({ isLong: true, margin, notional, tokens, ...rest });
+const larger = new MarketPosition({ ...position, margin: position.margin + added });
+const user = new MarketUser({
+    marketId, userId, long: position, short: MarketPosition.zero(false),
+    orderCounter: 1, claimableCredit: 0n,
+});
+```
+
+A position's `decreaseOrders` is its own frozen copy of the list. `MarketUser`
+rejects a position on the wrong side (`long` must have `isLong: true`), and
+both constructors name the first required field that is missing.
 
 ## Preview an order
 
 `OrderIntent` builds complete `OrderParams` for one market, owner and side:
-the expiration comes from `market.ledger + ttlLedgers`, and the fill bound
+the expiration comes from `market.ledger` plus a lifetime, and the fill bound
 from `slippageBps`. `previewOrder` runs the exact engine over it.
 
 ```ts
@@ -84,7 +121,7 @@ import { OrderIntent, previewOrder } from '@zenex-trade/zenex-sdk';
 
 const price = market.priceFromReport(report.bid, report.ask, report.publishTime);
 
-// 60-ledger lifetime, 1% maximum slippage.
+// Market orders live 60 ledgers; 1% maximum slippage.
 const intent = new OrderIntent(market, USER, true, 60, 100n);
 const order = intent.openMarket({
     notional: 1_000_0000000n, // 1,000 USDC of size
@@ -107,8 +144,61 @@ previewed.
 The other builders are `openLimit`, `openStop`, `closePosition`
 (`FULL_CLOSE`, so the close stays whole if the size changes), `decrease`,
 `addMargin`, `withdrawMargin`, `takeProfit` and `stopLoss`.
-`maxMarginForBalance` sizes the largest margin a wallet balance affords at a
-leverage.
+
+An order's lifetime depends on its kind:
+
+| Kinds | Constructor argument | Default |
+|---|---|---|
+| Market: `openMarket`, `closePosition`, `decrease`, `addMargin`, `withdrawMargin` | `ttlLedgers` (4th) | 60 ledgers, about 5 minutes |
+| Trigger: `openLimit`, `openStop`, `takeProfit`, `stopLoss` | `triggerTtlLedgers` (6th) | never expires (`NO_EXPIRY_LEDGER`) |
+
+A lifetime is a whole number of ledgers, zero or more; the constructor throws
+a `RangeError` for anything else. The contract accepts any expiration at or
+after the current ledger, up to the largest `u32` (`NO_EXPIRY_LEDGER`), which
+no lifetime exceeds, and an order fills through its expiration ledger. An expired order never fills, and
+its escrow stays in the market until the order is cancelled.
+
+`maxMarginForBalance` sizes the largest open a wallet balance affords at a
+leverage, spending the whole balance. It returns three exact amounts in
+atomic units:
+
+| Field | Meaning |
+|---|---|
+| `notional` | the order's `notional` |
+| `orderMargin` | the order's `margin`: `balance - execFee`, since the wallet pays `margin + execFee` |
+| `positionMargin` | the margin the position holds after the fill, which takes the trade fees out of the order's margin |
+
+```ts
+import { maxMarginForBalance, formatTokenFloor } from '@zenex-trade/zenex-sdk';
+
+const max = maxMarginForBalance(market, true, balance, 5, price);
+// `intent` carries a slippage bound, so the order needs the price.
+const order = intent.openMarket({ notional: max.notional, margin: max.orderMargin, price });
+formatTokenFloor(max.positionMargin, market.assetDecimals); // the margin to display
+```
+
+The order escrows exactly `balance` and opens at or under the leverage,
+measured as notional over position margin, and one atomic unit more of
+`notional` would not fit. A leverage above what the
+market's initial margin allows is capped at that maximum. A leverage that is
+not a positive finite number returns all zeros, as does a balance that
+affords no position. Do not pass `positionMargin` as the order's `margin`:
+the fill would take the fees out of it again.
+
+The order passes the initial-margin gate (713) under the conditions it was
+sized for: an open on a flat side, filled against the snapshot's book and fee
+side. It can still fail that gate when the book flips the fee side before the
+fill, or when the side already holds a position, whose pending funding and
+borrowing the fill settles out of the margin. The function does not solve for
+the other gates: the position and order minimums, the open-interest and
+utilization caps, and the maintenance gate (723), which a fill fails when the
+fees of closing the new position would leave it under its maintenance margin.
+Preview the order before you sign it.
+
+For amounts, parse what the user typed with `parseAtomic(text, decimals)`,
+which is exact. `toFixed(number, decimals)` converts a number that is already
+a float, rounding to the nearest unit; floats are lossy, so do not route text
+through it.
 
 ## Submit an order
 
@@ -179,6 +269,69 @@ the calls, the keeper or the price. A relayer can change those and still
 collect the fee. The order's own authorization and its `priceBound` still
 bind the fill.
 
+## From an operation to a submitted transaction
+
+Every binding returns a base64 XDR operation, and the SDK stops there: it
+never signs or submits. The rest is plain `@stellar/stellar-sdk`. This is the
+whole path for the resting order above.
+
+```ts
+import { BASE_FEE, Keypair, TransactionBuilder, rpc, xdr } from '@stellar/stellar-sdk';
+import { MarketContract, parseError, parseResult } from '@zenex-trade/zenex-sdk';
+
+const server = new rpc.Server(network.rpc);
+
+// 1. Build a transaction around the operation.
+const account = await server.getAccount(USER);
+const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: network.passphrase,
+})
+    .addOperation(xdr.Operation.fromXDR(createOp, 'base64'))
+    .setTimeout(60)
+    .build();
+
+// 2. Simulate. The result carries the footprint, the resource fee and the
+//    authorization entries; assembleTransaction puts them on the transaction.
+const simulated = await server.simulateTransaction(tx);
+if (rpc.Api.isSimulationError(simulated)) throw parseError(simulated);
+const prepared = rpc.assembleTransaction(tx, simulated).build();
+
+// 3. Sign. A wallet does this in a browser.
+prepared.sign(Keypair.fromSecret(SECRET));
+
+// 4. Send, then wait for the ledger to close.
+const sent = await server.sendTransaction(prepared);
+if (sent.status === 'ERROR') throw parseError(sent);
+const final = await server.pollTransaction(sent.hash);
+if (final.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    throw final.status === rpc.Api.GetTransactionStatus.FAILED
+        ? parseError(final)
+        : new Error(`transaction ${sent.hash} not found`);
+}
+const orderId = parseResult(final, MarketContract.parsers.createOrder);
+```
+
+A failed simulation names the contract's error code. A failed transaction
+does not: the ledger records only that the invocation trapped, so simulate
+first.
+
+**Where the price report comes from.** `createAndFill`, the keeper fills and
+`OracleContract.verifyPrice` take a `priceReport`: the signed
+[Chainlink Data Streams](https://docs.chain.link/data-streams) report for the
+market's stream, `market.feedId`, as raw bytes. You fetch it from the Data
+Streams API with your own credentials, or from a service that relays it; the
+SDK does not fetch reports. The same report holds the `bid`, `ask` and
+observation timestamp that `market.priceFromReport` takes, so the preview and
+the fill price off one report. The oracle rejects a report older than its
+staleness window, at most 15 seconds for a fill (`OraclePriceStale`, 782), so
+fetch it just before you simulate.
+
+For a router call, simulate with `simulateAndParse(..., { authMode:
+'record_allow_nonroot' })` as shown above, or pass the same auth mode to
+`server.simulateTransaction(tx, undefined, 'record_allow_nonroot')`, and
+assemble the same way.
+
 ## Vault orders
 
 Deposits and redeems are orders that a keeper fills.
@@ -231,11 +384,16 @@ through `previewOrder`.
 ## Errors
 
 `ZenexError` carries a `ZenexErrorCode`. The catalog covers every contract
-the SDK binds:
+the SDK binds, and the contracts a Zenex transaction passes through without
+the SDK binding them: the settlement token, the price verifier behind the
+oracle, and the smart-account wallet with its session policy and referral
+contracts.
 
 | Range | Source |
 |---|---|
-| 1-13, 100-114, 400-410 | token and vault-share contracts |
+| 1-13 | Stellar Asset Contract (the settlement token) |
+| 2-18 | Chainlink Data Streams verifier, called by the oracle |
+| 100-114, 400-410 | vault share token |
 | 600 | shared admin |
 | 700-772 | market |
 | 780-793 | oracle |
@@ -263,8 +421,69 @@ if (sent.status === 'ERROR') {
 ```
 
 `simulateAndParse` throws a `ZenexError` with the decoded code, and the raw
-RPC text on `cause`. `parseContractErrorCode` pulls a code out of any
-diagnostic string.
+RPC text on `cause`. `parseContractErrorCode` reads the code of the error
+that ended a simulation: the leading host error decides, and a contract error
+the invocation caught and survived, which appears only in the event log, is
+not reported.
+
+**Codes 2-13 have two meanings.** The token and the price verifier both use
+them, and the oracle passes the verifier's code through unchanged: 10 is an
+insufficient balance from the token and a deactivated signing config from the
+verifier.
+
+On a failed simulation, `parseError` and `simulateAndParse` decide which one
+it is from the simulation itself. Its diagnostic events name the contract
+that raised the error and the call it was raised in: the verifier's `verify`,
+or a token function such as `transfer`. This also holds for a call that does
+both, such as `createAndFill` or a fee forwarder relay, where no caller-side
+guess would be right:
+
+```ts
+const simulation = await server.simulateTransaction(tx);
+if (rpc.Api.isSimulationError(simulation)) {
+    const error = parseError(simulation);
+    error.source; // 'token' or 'verifier' for a code in 2-13
+    error.codeName; // 'BalanceError', or 'VerifierDigestInactive'
+}
+```
+
+The number alone never decides. When the events do not show the failing
+call, the error is marked `ambiguous`: `codeName` joins both names
+(`OverflowError|VerifierBadVerification`) and the message states both
+meanings. `error.code` still equals the token member of `ZenexErrorCode`, so
+check `error.ambiguous` or `error.source` before acting on a code in that
+range. That is the case for a bare code, and for an error text with no event
+log: the RPC's simulation error string carries none, so keep the response and
+not only its `error` text.
+
+You can also say which one you expect, and a hint overrides the events:
+
+```ts
+import { parseError } from '@zenex-trade/zenex-sdk';
+import { inferErrorSource, zenexErrorFromCode } from '@zenex-trade/zenex-sdk/errors';
+
+zenexErrorFromCode(12, 'verifier').codeName; // 'VerifierBadVerification'
+zenexErrorFromCode(12, 'token').codeName; // 'OverflowError'
+if (rpc.Api.isSimulationError(simulation)) {
+    parseError(simulation, 'verifier'); // the hint wins
+}
+inferErrorSource(text); // from a text that includes the host's event log, as the CLI prints
+```
+
+`inferErrorSource` is exported from the root and from `./errors`, which loads
+without the Stellar SDK.
+
+**Account contract codes.** When an account contract rejects an
+authorization, the simulation ends with `Error(Auth, InvalidAction)` and the
+account's own code sits on a diagnostic event. `parseError` reads it from the
+response's events and decodes a smart-account (3000-3016) or session-policy
+(4002-4007) code. Another account numbers its errors as it likes, so any
+other number there comes back as `UnknownError` with the number in its
+message, never as the market or verifier error of the same number.
+
+`ZenexError` and `MarketStateError` are each defined once per build, so
+`instanceof` does not hold across the ESM and CommonJS builds: compare
+`error.name` (`'ZenexError'`, `'MarketStateError'`) or `error.code`.
 
 ## Events
 
@@ -302,29 +521,67 @@ custom reads.
 
 ## Versioning
 
-1.0.0 is the first release of `@zenex-trade/zenex-sdk`. The package continues
-`@zenith-protocols/zenex-sdk`, which was installed from git and is not an
-upgrade path on npm. Breaking changes bump the major
-version. [CHANGELOG.md](./CHANGELOG.md) lists each release and the contract
-releases it binds.
+The package follows semver. The contract covers what the root export
+(`@zenex-trade/zenex-sdk`) and `@zenex-trade/zenex-sdk/errors` export and
+document. Deep imports are blocked by the package's export map, and members
+marked internal are stripped from the type declarations.
+
+Each SDK release binds one release of the contracts, whose interface and
+math it mirrors:
+
+| SDK | Core contracts ([zenex-contracts](https://github.com/zenex-trade/zenex-contracts)) | Utility contracts (market router, fee forwarder) |
+|---|---|---|
+| 1.0.0 | v1.0.0 | v0.0.2 |
+
+- A contract release that changes an interface, an error code, an event or
+  the fill math needs a new SDK release. Until you upgrade, previews can
+  disagree with the chain.
+- The SDK takes a new major version when that contract release breaks the
+  SDK's own API, and a minor or patch version otherwise.
+- [CHANGELOG.md](./CHANGELOG.md) lists each release and the contracts it
+  binds.
+
+1.0.0 is the first release on npm.
 
 ## Development
 
 ```bash
 npm test
+npm run typecheck          # src and test
+npm run lint
+npm run format:check       # Prettier; npm run format rewrites
 npm run architecture:check
-npm run specs:check   # needs ../zenex-contracts and ../zenex-util-contracts
 npm run build
+npm run specs:check        # needs the release WASMs, see below
 ```
 
-`specs:check` compares the committed contract specs with the release WASMs:
-`../zenex-contracts/wasm/` for the core contracts, and the market router and
-fee forwarder built in `../zenex-util-contracts` (run `make build` there at
-the released tag). Set `ZENEX_CONTRACTS_WASM_DIR` to compare the core
-contracts with another build, such as
-`../zenex-contracts/target/wasm32v1-none/release`. `npm run live:check` validates a build read-only against a
-live market; set `ZENEX_RPC` and the other `ZENEX_*` variables listed in
-`scripts/live-check.mjs`.
+`npm publish` runs `prepublishOnly` first: `typecheck`, `lint`,
+`format:check`, `test` and `architecture:check`. `specs:check` is not part of
+it, because it reads files outside the repository.
+
+`specs:check` compares the committed contract specs with the release WASMs,
+and `specs:generate` rewrites them. Both read two directories:
+
+- `ZENEX_CONTRACTS_WASM_DIR`: the core contracts. Download the assets of the
+  bound [zenex-contracts release](https://github.com/zenex-trade/zenex-contracts/releases)
+  into one directory. The script finds each contract under its published
+  name (`market_v1.0.0.wasm`, `strategy-vault_v1.0.0.wasm`) or its plain
+  crate name (`strategy_vault.wasm`), so a local build output works as well.
+- `ZENEX_UTIL_CONTRACTS_WASM_DIR`: the market router and fee forwarder WASMs
+  of the bound utility-contracts release, found by the same naming rule.
+  `ZENEX_UTIL_CONTRACTS_ROOT` names a source checkout instead and reads its
+  `target/wasm32v1-none/release`.
+
+```bash
+gh release download v1.0.0 --repo zenex-trade/zenex-contracts --dir ./release-wasm
+ZENEX_CONTRACTS_WASM_DIR=./release-wasm \
+ZENEX_UTIL_CONTRACTS_WASM_DIR=/path/to/utility-wasm \
+npm run specs:check
+```
+
+`npm run live:check` validates a build, read-only, against a live market: set
+`ZENEX_RPC` and `ZENEX_MARKET`, and see the header of
+`scripts/live-check.mjs` for the rest.
 
 ## License
 

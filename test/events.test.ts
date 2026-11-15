@@ -2,9 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { contract } from '@stellar/stellar-sdk';
 import { ZenexContractType } from '../src/base_event.js';
 import type { ZenexEvent } from '../src/base_event.js';
-import {
-    MarketEventType,
-} from '../src/contracts/market/events.js';
+import { MarketEventType } from '../src/contracts/market/events.js';
 import { OwnableEventType } from '../src/contracts/ownable/events.js';
 import type { OwnableEvent, OwnershipTransferEvent } from '../src/contracts/ownable/events.js';
 import { OracleEventType } from '../src/contracts/oracle/events.js';
@@ -72,7 +70,11 @@ describe('every spec event has an SDK event type', () => {
         ['strategy vault', VaultContract.spec, Object.values(VaultEventType)],
         ['oracle', OracleContract.spec, [...Object.values(OracleEventType), ...ownable]],
         ['treasury', TreasuryContract.spec, [...Object.values(TreasuryEventType), ...ownable]],
-        ['governance', GovernanceContract.spec, [...Object.values(GovernanceEventType), ...ownable]],
+        [
+            'governance',
+            GovernanceContract.spec,
+            [...Object.values(GovernanceEventType), ...ownable],
+        ],
         ['fee forwarder', FeeForwarderContract.spec, Object.values(FeeForwarderEventType)],
     ] as const)('%s', (_name, spec, sdkNames) => {
         expect(sorted([...sdkNames])).toEqual(specEventNames(spec));

@@ -30,9 +30,7 @@ import {
 //   margin  $5,000   -> 50_000_000_000n (5e10), 10x leverage
 // =============================================================================
 
-const PRICE_100K = 10_000_000_000_000n; // $100,000 at 8 oracle decimals
-const PRICE_110K = 11_000_000_000_000n; // $110,000
-const PRICE_300K = 30_000_000_000_000n; // $300,000
+const PRICE_110K = 11_000_000_000_000n; // $110,000 at 8 oracle decimals
 
 const NOTIONAL_50K = 500_000_000_000n; // $50,000, 7-dec
 const TOKENS_HALF_UNIT = 50_000_000_000_000_000n; // 5e16 = 5e11 * 1e18 / 1e13
@@ -196,7 +194,9 @@ describe('positionEquity (margin + pnl - max(0, funding) - borrowing)', () => {
             fundingIdx: pairOf(FUNDING_IDX_ONE_HOUR, 0n),
             borrowingIdx: pairOf(BORROWING_IDX_ONE_DAY, 0n),
         });
-        expect(positionEquity(longPosition, market, PRICE_110K, SCALAR_18, true)).toBe(99_780_400_000n);
+        expect(positionEquity(longPosition, market, PRICE_110K, SCALAR_18, true)).toBe(
+            99_780_400_000n,
+        );
     });
 
     // The position snapshot sits above the market index (earned funding,
@@ -213,7 +213,13 @@ describe('positionEquity (margin + pnl - max(0, funding) - borrowing)', () => {
             fundingIdx: pairOf(0n, 0n),
             borrowingIdx: pairOf(BORROWING_IDX_ONE_DAY, 0n),
         });
-        const equityWithEarnedFunding = positionEquity(earnedFundingPosition, market, PRICE_110K, SCALAR_18, true);
+        const equityWithEarnedFunding = positionEquity(
+            earnedFundingPosition,
+            market,
+            PRICE_110K,
+            SCALAR_18,
+            true,
+        );
         expect(equityWithEarnedFunding).toBe(99_784_000_000n);
 
         // Identical to a position with no funding delta at all.
@@ -270,9 +276,7 @@ describe('liquidationPrice (solves the settled-equity maintenance line)', () => 
     const book = (isLong: boolean, overrides: Partial<MarketData> = {}) =>
         makeMarket({
             notional: isLong ? pairOf(NOTIONAL_50K, 0n) : pairOf(0n, NOTIONAL_50K),
-            tokens: isLong
-                ? pairOf(TOKENS_HALF_UNIT, 0n)
-                : pairOf(0n, TOKENS_HALF_UNIT),
+            tokens: isLong ? pairOf(TOKENS_HALF_UNIT, 0n) : pairOf(0n, TOKENS_HALF_UNIT),
             ...overrides,
         });
 
@@ -283,7 +287,9 @@ describe('liquidationPrice (solves the settled-equity maintenance line)', () => 
     // Short: target = 5e11 + 5e10 - 1.75e9 - 2.5e10 = 5.2325e11;
     // price = 5.2325e11 * 20 = 10,465,000,000,000 ($104,650).
     it('short liquidation at $104,650 with no accruals', () => {
-        expect(liquidationPrice(tenXPosition, config(), book(false), false)).toBe(10_465_000_000_000n);
+        expect(liquidationPrice(tenXPosition, config(), book(false), false)).toBe(
+            10_465_000_000_000n,
+        );
     });
 
     // Accruals shrink the loss budget: funding 3_600_000 + borrowing 216_000_000
@@ -308,7 +314,9 @@ describe('liquidationPrice (solves the settled-equity maintenance line)', () => 
             fundingIdx: FUNDING_IDX_ONE_HOUR,
         });
         const market = book(true, { fundingIdx: pairOf(0n, 0n) });
-        expect(liquidationPrice(earnedFundingPosition, config(), market, true)).toBe(9_535_000_000_000n);
+        expect(liquidationPrice(earnedFundingPosition, config(), market, true)).toBe(
+            9_535_000_000_000n,
+        );
     });
 
     // The threshold is the maintenance line alone. The liquidation fee rate
@@ -317,8 +325,12 @@ describe('liquidationPrice (solves the settled-equity maintenance line)', () => 
     it('the liquidation-fee rate does not move the threshold', () => {
         const noFeeConfig = { ...config(), liqFee: 0n };
         const highFeeConfig = { ...config(), liqFee: (4n * SCALAR_18) / 100n }; // 4%, still < 5% maintenance
-        expect(liquidationPrice(tenXPosition, noFeeConfig, book(true), true)).toBe(9_535_000_000_000n);
-        expect(liquidationPrice(tenXPosition, highFeeConfig, book(true), true)).toBe(9_535_000_000_000n);
+        expect(liquidationPrice(tenXPosition, noFeeConfig, book(true), true)).toBe(
+            9_535_000_000_000n,
+        );
+        expect(liquidationPrice(tenXPosition, highFeeConfig, book(true), true)).toBe(
+            9_535_000_000_000n,
+        );
     });
 
     // The close fee follows the book: the same long on a short-heavy book

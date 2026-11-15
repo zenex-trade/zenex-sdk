@@ -10,9 +10,7 @@ export interface TreasuryInstanceState {
 }
 
 /** Never throws on a treasury instance. Both slots have a default. */
-export function parseTreasuryInstance(
-    instanceVal: xdr.ScVal,
-): TreasuryInstanceState {
+export function parseTreasuryInstance(instanceVal: xdr.ScVal): TreasuryInstanceState {
     const storage = instanceStorage(instanceVal, 'treasury');
     const rate = storage.get('Rate');
     return {

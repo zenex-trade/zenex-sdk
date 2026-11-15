@@ -1,5 +1,13 @@
 import { treasurySpec } from '../contract_specs.js';
-import { Address, Contract, contract, xdr, nativeToScVal, scValToNative, Operation } from '@stellar/stellar-sdk';
+import {
+    Address,
+    Contract,
+    contract,
+    xdr,
+    nativeToScVal,
+    scValToNative,
+    Operation,
+} from '@stellar/stellar-sdk';
 import { i128, u32 } from '../../index.js';
 import { Buffer } from 'buffer';
 
@@ -23,8 +31,7 @@ export class TreasuryContract extends Contract {
     /** Parsers for each contract method's simulated result (base64 XDR), keyed by JS method name. */
     static readonly parsers = {
         // Treasury methods
-        getRate: (result: string): i128 =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        getRate: (result: string): i128 => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         setRate: () => {},
         withdraw: () => {},
         // Ownable methods
@@ -46,13 +53,11 @@ export class TreasuryContract extends Contract {
         wasmHash: Buffer | string,
         args: TreasuryConstructorArgs,
         salt?: Buffer,
-        format: 'hex' | 'base64' = 'hex'
+        format: 'hex' | 'base64' = 'hex',
     ): string {
         return Operation.createCustomContract({
             address: Address.fromString(deployer),
-            wasmHash: typeof wasmHash === 'string'
-                ? Buffer.from(wasmHash, format)
-                : wasmHash,
+            wasmHash: typeof wasmHash === 'string' ? Buffer.from(wasmHash, format) : wasmHash,
             salt,
             constructorArgs: [
                 Address.fromString(args.owner).toScVal(),
@@ -69,10 +74,7 @@ export class TreasuryContract extends Contract {
      *   `TreasuryInvalidRate` (900).
      */
     setRate(rate: i128): string {
-        return this.call(
-            'set_rate',
-            nativeToScVal(rate, { type: 'i128' }),
-        ).toXDR('base64');
+        return this.call('set_rate', nativeToScVal(rate, { type: 'i128' })).toXDR('base64');
     }
 
     /**

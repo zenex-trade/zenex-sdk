@@ -14,10 +14,7 @@ import type { Network } from '../index.js';
  * @throws {MarketStateError} `MISSING_STATE` when the treasury instance is
  *   absent or TTL-expired.
  */
-export async function loadTreasuryRate(
-    network: Network,
-    treasury: string,
-): Promise<bigint> {
+export async function loadTreasuryRate(network: Network, treasury: string): Promise<bigint> {
     const key = contractInstanceLedgerKey(treasury);
     const batch = await readEntries(network, [key]);
     return parseTreasuryRate(batch.require(key, `treasury instance ${treasury}`));
@@ -36,7 +33,5 @@ export async function loadTreasuryInstance(
 ): Promise<TreasuryInstanceState> {
     const key = contractInstanceLedgerKey(treasury);
     const batch = await readEntries(network, [key]);
-    return parseTreasuryInstance(
-        batch.require(key, `treasury instance ${treasury}`),
-    );
+    return parseTreasuryInstance(batch.require(key, `treasury instance ${treasury}`));
 }

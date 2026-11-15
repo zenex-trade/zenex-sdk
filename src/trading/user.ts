@@ -13,6 +13,7 @@ import { readEntries } from '../entries.js';
 import type { EntryBatch } from '../entries.js';
 import type { Market } from './market.js';
 import { MarketPosition } from './position.js';
+import { requireFields } from './internal/fields.js';
 
 /**
  * One live entry in a user's shared order-id space: a keeper trade order or
@@ -32,52 +33,119 @@ const DEFAULT_ORDER_LOOKBACK = 50;
 /** Per-request key budget the RPC tolerates; 2 keys per probed id. */
 const MAX_ORDER_LOOKBACK = 90;
 
-/** A never-opened side reads as the contract's `Position::zeroed`. */
-function zeroPosition(isLong: boolean): MarketPosition {
-    return new MarketPosition(isLong, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []);
+/**
+ * The fields of a {@link MarketUser}, as its constructor takes them.
+ * {@link MarketUser.load} fills every one from the ledger.
+ */
+export interface MarketUserFields {
+    /** The market (trading) contract this state was read from. */
+    readonly marketId: string;
+    /** Position owner. */
+    readonly userId: string;
+    /** Long side; zeroed when no row is stored (never opened). */
+    readonly long: MarketPosition;
+    /** Short side; zeroed when no row is stored (never opened). */
+    readonly short: MarketPosition;
+    /**
+     * The id the user's next order gets (trade and vault orders share
+     * the counter), as `get_order_counter` reports it: `1` when no
+     * counter is stored, since the user has never created an order.
+     */
+    readonly orderCounter: number;
+    /** Funding owed to the user, plus any parked failed payout, token-dec. */
+    readonly claimableCredit: bigint;
+    /**
+     * The entries whose TTL lapsed (archived). Each still decodes from
+     * the value the RPC returns, which stays the user's state: the next
+     * transaction that touches it restores it, and pays the restore fee.
+     * Defaults to none when omitted.
+     */
+    readonly archived?: readonly MarketUserEntry[];
 }
+
+/** The fields `new MarketUser()` cannot do without, in declaration order. */
+const REQUIRED_FIELDS = [
+    'marketId',
+    'userId',
+    'long',
+    'short',
+    'orderCounter',
+    'claimableCredit',
+] as const satisfies readonly (keyof MarketUserFields)[];
 
 /**
  * One subject's state on one market: both stored positions, the order
- * counter, and claimable funding. Plain public fields. Pairing a user with
- * the market it was read against is the caller's responsibility.
+ * counter, and claimable funding. Plain readonly fields. Pairing a user
+ * with the market it was read against is the caller's responsibility.
+ *
+ * Read one with {@link MarketUser.load} or `Market.loadWithUser`, or build
+ * one from indexed state with `new MarketUser({ ... })`.
  */
-export class MarketUser {
-    constructor(
-        /** The market (trading) contract this state was read from. */
-        public marketId: string,
-        /** Position owner. */
-        public userId: string,
-        /** Long side; zeroed when no row is stored (never opened). */
-        public long: MarketPosition,
-        /** Short side; zeroed when no row is stored (never opened). */
-        public short: MarketPosition,
-        /**
-         * The id the user's next order gets (trade and vault orders share
-         * the counter), as `get_order_counter` reports it: `1` when no
-         * counter is stored, since the user has never created an order.
-         */
-        public orderCounter: number,
-        /** Funding owed to the user, plus any parked failed payout, token-dec. */
-        public claimableCredit: bigint,
-        /**
-         * The entries whose TTL lapsed (archived). Each still decodes from
-         * the value the RPC returns, which stays the user's state: the next
-         * transaction that touches it restores it, and pays the restore fee.
-         */
-        public archived: readonly MarketUserEntry[] = [],
-    ) {}
+export class MarketUser implements MarketUserFields {
+    /** The market (trading) contract this state was read from. */
+    readonly marketId: string;
+    /** Position owner. */
+    readonly userId: string;
+    /** Long side; zeroed when no row is stored (never opened). */
+    readonly long: MarketPosition;
+    /** Short side; zeroed when no row is stored (never opened). */
+    readonly short: MarketPosition;
+    /**
+     * The id the user's next order gets (trade and vault orders share
+     * the counter), as `get_order_counter` reports it: `1` when no
+     * counter is stored, since the user has never created an order.
+     */
+    readonly orderCounter: number;
+    /** Funding owed to the user, plus any parked failed payout, token-dec. */
+    readonly claimableCredit: bigint;
+    /**
+     * The entries whose TTL lapsed (archived). Each still decodes from
+     * the value the RPC returns, which stays the user's state: the next
+     * transaction that touches it restores it, and pays the restore fee.
+     */
+    readonly archived: readonly MarketUserEntry[];
+
+    /**
+     * Build a user's state from its fields. `archived` defaults to none.
+     * @throws {TypeError} if called without a fields object, such as with
+     *   the positional arguments it took before 1.0.0; with a required field
+     *   missing, naming the first one; or when `long` is not a long position
+     *   or `short` not a short one.
+     */
+    constructor(fields: MarketUserFields) {
+        requireFields(
+            'MarketUser',
+            'new MarketUser({ marketId, userId, ... })',
+            fields,
+            REQUIRED_FIELDS,
+        );
+        // Every method of a position reads its own side, so a position
+        // under the wrong name would quote the other side's numbers.
+        if (fields.long.isLong !== true) {
+            throw new TypeError(
+                "new MarketUser() field 'long' must be a long position (isLong: true)",
+            );
+        }
+        if (fields.short.isLong !== false) {
+            throw new TypeError(
+                "new MarketUser() field 'short' must be a short position (isLong: false)",
+            );
+        }
+        this.marketId = fields.marketId;
+        this.userId = fields.userId;
+        this.long = fields.long;
+        this.short = fields.short;
+        this.orderCounter = fields.orderCounter;
+        this.claimableCredit = fields.claimableCredit;
+        this.archived = Object.freeze([...(fields.archived ?? [])]);
+    }
 
     /**
      * Read one subject's positions, counter, and claimable credit. One
      * `getLedgerEntries`, four keys. An archived entry decodes as usual and
      * is listed in {@link MarketUser.archived}; it never fails the read.
      */
-    static async load(
-        network: Network,
-        marketId: string,
-        userId: string,
-    ): Promise<MarketUser> {
+    static async load(network: Network, marketId: string, userId: string): Promise<MarketUser> {
         const keys = marketUserKeys(marketId, userId);
         const batch = await readEntries(network, [
             keys.long,
@@ -103,19 +171,12 @@ export class MarketUser {
      *
      * @throws {RangeError} if `lookback` is not a non-negative safe integer.
      */
-    async loadOrders(
-        network: Network,
-        lookback?: number,
-    ): Promise<PendingOrder[]> {
+    async loadOrders(network: Network, lookback?: number): Promise<PendingOrder[]> {
         const requested = lookback ?? DEFAULT_ORDER_LOOKBACK;
         if (!Number.isSafeInteger(requested) || requested < 0) {
             throw new RangeError('lookback must be a non-negative safe integer');
         }
-        const window = Math.min(
-            requested,
-            MAX_ORDER_LOOKBACK,
-            this.orderCounter - 1,
-        );
+        const window = Math.min(requested, MAX_ORDER_LOOKBACK, this.orderCounter - 1);
         if (window <= 0) return [];
 
         const from = this.orderCounter - window;
@@ -128,11 +189,7 @@ export class MarketUser {
             probes.push({
                 id,
                 order: marketOrderLedgerKey(this.marketId, this.userId, id),
-                vaultOrder: marketVaultOrderLedgerKey(
-                    this.marketId,
-                    this.userId,
-                    id,
-                ),
+                vaultOrder: marketVaultOrderLedgerKey(this.marketId, this.userId, id),
             });
         }
         const batch = await readEntries(
@@ -173,8 +230,7 @@ export class MarketUser {
      */
     claimable(market: Market): bigint {
         const pool = market.data.creditPool;
-        const amount =
-            this.claimableCredit < pool ? this.claimableCredit : pool;
+        const amount = this.claimableCredit < pool ? this.claimableCredit : pool;
         return amount > 0n ? amount : 0n;
     }
 }
@@ -197,11 +253,7 @@ export function marketUserKeys(
  * rows archive after about 120 idle days, but an archived value is still
  * the user's state, so it decodes and is listed rather than failing the read.
  */
-export function decodeUser(
-    marketId: string,
-    userId: string,
-    batch: EntryBatch,
-): MarketUser {
+export function decodeUser(marketId: string, userId: string, batch: EntryBatch): MarketUser {
     const keys = marketUserKeys(marketId, userId);
     const archived: MarketUserEntry[] = [];
     const read = (name: MarketUserEntry): xdr.ScVal | undefined => {
@@ -213,7 +265,7 @@ export function decodeUser(
         const value = read(name);
         return value
             ? MarketPosition.from(parsePosition(scValToNative(value)), isLong)
-            : zeroPosition(isLong);
+            : MarketPosition.zero(isLong);
     };
 
     const long = side('long', true);
@@ -221,14 +273,14 @@ export function decodeUser(
     const counter = read('orderCounter');
     const credit = read('claimableCredit');
 
-    return new MarketUser(
+    return new MarketUser({
         marketId,
         userId,
         long,
         short,
         // An absent counter reads 1, as the contract's get_order_counter does.
-        counter ? Number(scValToNative(counter)) : 1,
-        credit ? (scValToNative(credit) as bigint) : 0n,
+        orderCounter: counter ? Number(scValToNative(counter)) : 1,
+        claimableCredit: credit ? (scValToNative(credit) as bigint) : 0n,
         archived,
-    );
+    });
 }

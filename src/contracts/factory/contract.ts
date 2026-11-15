@@ -1,5 +1,13 @@
 import { factorySpec } from '../contract_specs.js';
-import { Address, Contract, contract, xdr, nativeToScVal, scValToNative, Operation } from '@stellar/stellar-sdk';
+import {
+    Address,
+    Contract,
+    contract,
+    xdr,
+    nativeToScVal,
+    scValToNative,
+    Operation,
+} from '@stellar/stellar-sdk';
 import { u32 } from '../../index.js';
 import { MarketConfig, marketConfigToScVal } from '../market/types.js';
 import { Buffer } from 'buffer';
@@ -20,12 +28,14 @@ export interface FactoryInitMeta {
 
 /** Encode a `FactoryInitMeta` as its ScMap (keys in symbol order). */
 function initMetaToScVal(initMeta: FactoryInitMeta): xdr.ScVal {
-    const marketHash = initMeta.market_hash instanceof Buffer
-        ? initMeta.market_hash
-        : Buffer.from(initMeta.market_hash);
-    const vaultHash = initMeta.vault_hash instanceof Buffer
-        ? initMeta.vault_hash
-        : Buffer.from(initMeta.vault_hash);
+    const marketHash =
+        initMeta.market_hash instanceof Buffer
+            ? initMeta.market_hash
+            : Buffer.from(initMeta.market_hash);
+    const vaultHash =
+        initMeta.vault_hash instanceof Buffer
+            ? initMeta.vault_hash
+            : Buffer.from(initMeta.vault_hash);
     return xdr.ScVal.scvMap([
         new xdr.ScMapEntry({
             key: xdr.ScVal.scvSymbol('market_hash'),
@@ -66,8 +76,7 @@ export class FactoryContract extends Contract {
         deployMarket: (result: string): [string, string] =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         /** Returns whether the queried market address was deployed by this factory. */
-        isDeployed: (result: string): boolean =>
-            scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
+        isDeployed: (result: string): boolean => scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         /** Returns the factory's current `FactoryInitMeta`. */
         getInitMeta: (result: string): FactoryInitMeta =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
@@ -95,15 +104,13 @@ export class FactoryContract extends Contract {
         wasmHash: Buffer | string,
         args: FactoryConstructorArgs,
         salt?: Buffer,
-        format: 'hex' | 'base64' = 'hex'
+        format: 'hex' | 'base64' = 'hex',
     ): string {
         const initMetaScVal = initMetaToScVal(args.init_meta);
 
         return Operation.createCustomContract({
             address: Address.fromString(deployer),
-            wasmHash: typeof wasmHash === 'string'
-                ? Buffer.from(wasmHash, format)
-                : wasmHash,
+            wasmHash: typeof wasmHash === 'string' ? Buffer.from(wasmHash, format) : wasmHash,
             salt,
             constructorArgs: [Address.fromString(args.owner).toScVal(), initMetaScVal],
         }).toXDR('base64');
@@ -189,10 +196,7 @@ export class FactoryContract extends Contract {
      * that this factory never deployed decodes to `false` rather than an error.
      */
     isDeployed(marketId: string): string {
-        return this.call(
-            'is_deployed',
-            Address.fromString(marketId).toScVal(),
-        ).toXDR('base64');
+        return this.call('is_deployed', Address.fromString(marketId).toScVal()).toXDR('base64');
     }
 
     // ============================================================

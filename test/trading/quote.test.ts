@@ -407,9 +407,7 @@ function verifiedPrice(inputs: Record<string, unknown>): PriceData {
     };
 }
 
-function input(
-    overrides: Partial<PositionActionInput> = {},
-): PositionActionInput {
+function input(overrides: Partial<PositionActionInput> = {}): PositionActionInput {
     return {
         ledger: 42,
         now: 1n,
@@ -427,10 +425,7 @@ function input(
     };
 }
 
-function vector(
-    cases: Record<string, ContractCase>,
-    id: string,
-): ContractCase {
+function vector(cases: Record<string, ContractCase>, id: string): ContractCase {
     const found = cases[id];
     if (!found) throw new Error(`Missing vector ${id}`);
     return found;
@@ -448,9 +443,7 @@ function positionVectorInput(id: string): PositionActionInput {
     const data = market({
         notional: isLong ? pair(open.notional, 0n) : pair(0n, open.notional),
         tokens: isLong ? pair(open.tokens, 0n) : pair(0n, open.tokens),
-        margin: isLong
-            ? pair(open.margin, 0n)
-            : pair(0n, open.margin),
+        margin: isLong ? pair(open.margin, 0n) : pair(0n, open.margin),
         accruedAt: inputs.now as bigint,
     });
     const operation = golden.operation;
@@ -476,10 +469,8 @@ function positionVectorInput(id: string): PositionActionInput {
         market: data,
         config: config({
             minPositionNotional: (inputs.min_position_notional ?? 1n) as bigint,
-            maxPositionNotional: (inputs.max_position_notional ??
-                1_000_000_000_000n) as bigint,
-            maxOpenInterest: (inputs.max_open_interest ??
-                10_000_000_000_000n) as bigint,
+            maxPositionNotional: (inputs.max_position_notional ?? 1_000_000_000_000n) as bigint,
+            maxOpenInterest: (inputs.max_open_interest ?? 10_000_000_000_000n) as bigint,
             feeDom: inputs.fee_dom as bigint,
             feeNonDom: inputs.fee_non_dom as bigint,
             impactScalar: inputs.impact_scalar as bigint,
@@ -508,9 +499,7 @@ function marginVectorInput(id: string): PositionActionInput {
     const data = market({
         notional: isLong ? pair(open.notional, 0n) : pair(0n, open.notional),
         tokens: isLong ? pair(open.tokens, 0n) : pair(0n, open.tokens),
-        margin: isLong
-            ? pair(open.margin, 0n)
-            : pair(0n, open.margin),
+        margin: isLong ? pair(open.margin, 0n) : pair(0n, open.margin),
         fundingIdx: isLong
             ? pair(inputs.market_funding_idx as bigint, 0n)
             : pair(0n, inputs.market_funding_idx as bigint),
@@ -566,15 +555,9 @@ describe('exact position action transitions', () => {
             tokens: expected.position_tokens,
             margin: expected.position_collateral,
         });
-        expect(result.value.postMarket.notional.long).toBe(
-            expected.market_notional,
-        );
-        expect(result.value.postMarket.tokens.long).toBe(
-            expected.market_tokens,
-        );
-        expect(result.value.postMarket.margin.long).toBe(
-            expected.market_collateral,
-        );
+        expect(result.value.postMarket.notional.long).toBe(expected.market_notional);
+        expect(result.value.postMarket.tokens.long).toBe(expected.market_tokens);
+        expect(result.value.postMarket.margin.long).toBe(expected.market_collateral);
         expect(result.value.fees).toMatchObject({
             base: expected.base_fee,
             impact: expected.impact_fee,
@@ -607,15 +590,9 @@ describe('exact position action transitions', () => {
             tokens: expected.position_tokens,
             margin: expected.position_collateral,
         });
-        expect(result.value.postMarket.notional.long).toBe(
-            expected.market_notional,
-        );
-        expect(result.value.postMarket.tokens.long).toBe(
-            expected.market_tokens,
-        );
-        expect(result.value.postMarket.margin.long).toBe(
-            expected.market_collateral,
-        );
+        expect(result.value.postMarket.notional.long).toBe(expected.market_notional);
+        expect(result.value.postMarket.tokens.long).toBe(expected.market_tokens);
+        expect(result.value.postMarket.margin.long).toBe(expected.market_collateral);
         expect(result.value.fees.base).toBe(expected.base_fee);
         expect(result.value.fees.impact).toBe(expected.impact_fee);
         expect(result.value.walletPayout).toBe(expected.returned);
@@ -633,15 +610,9 @@ describe('exact position action transitions', () => {
         expect(result.kind).toBe('exact');
         if (result.kind !== 'exact') return;
         expect(result.value.postPosition).toEqual(position());
-        expect(result.value.postMarket.notional.long).toBe(
-            expected.market_notional,
-        );
-        expect(result.value.postMarket.tokens.long).toBe(
-            expected.market_tokens,
-        );
-        expect(result.value.postMarket.margin.long).toBe(
-            expected.market_collateral,
-        );
+        expect(result.value.postMarket.notional.long).toBe(expected.market_notional);
+        expect(result.value.postMarket.tokens.long).toBe(expected.market_tokens);
+        expect(result.value.postMarket.margin.long).toBe(expected.market_collateral);
         expect(result.value.walletPayout).toBe(expected.returned);
         expect(result.value.fees.base).toBe(expected.base_fee);
         expect(result.value.fees.impact).toBe(expected.impact_fee);
@@ -830,13 +801,9 @@ describe('funding, borrowing, and margin-only actions', () => {
             fundingIdx: expected.post_position_funding_idx,
             borrowingIdx: expected.post_position_borrowing_idx,
         });
-        expect(result.value.postMarket.creditOwed).toBe(
-            expected.credit_owed_delta,
-        );
+        expect(result.value.postMarket.creditOwed).toBe(expected.credit_owed_delta);
         expect(result.value.postMarket.margin.long).toBe(11n);
-        expect(result.value.claimableCreditDelta).toBe(
-            expected.claimable_credit_delta,
-        );
+        expect(result.value.claimableCreditDelta).toBe(expected.claimable_credit_delta);
         expect(result.value.fees).toMatchObject({
             funding: -1n,
             borrowing: 1n,
@@ -851,35 +818,22 @@ describe('funding, borrowing, and margin-only actions', () => {
         'margin.fixed_withdraw.below_accrued_debit',
         'margin.fixed_withdraw.equal_accrued_debit',
         'margin.fixed_withdraw.above_accrued_debit',
-    ])(
-        '$id pays the withdrawal in full and debits the accrual from margin',
-        (id) => {
-            const golden = vector(marginCases, id);
-            const work = golden.work ?? {};
-            const expected = golden.expected;
-            const result = quotePositionAction(marginVectorInput(id));
+    ])('$id pays the withdrawal in full and debits the accrual from margin', (id) => {
+        const golden = vector(marginCases, id);
+        const work = golden.work ?? {};
+        const expected = golden.expected;
+        const result = quotePositionAction(marginVectorInput(id));
 
-            expect(result.kind).toBe('exact');
-            if (result.kind !== 'exact') return;
-            expect(result.value.postPosition.margin).toBe(
-                expected.position_collateral,
-            );
-            expect(result.value.postPosition.fundingIdx).toBe(
-                expected.post_position_funding_idx,
-            );
-            expect(result.value.postPosition.borrowingIdx).toBe(
-                expected.post_position_borrowing_idx,
-            );
-            expect(result.value.postMarket.creditPool).toBe(
-                expected.credit_pool_delta,
-            );
-            expect(result.value.claimableCreditDelta).toBe(
-                expected.claimable_credit_delta,
-            );
-            expect(result.value.fees.marginDebit).toBe(work.debit);
-            expect(result.value.walletPayout).toBe(expected.trader_return);
-        },
-    );
+        expect(result.kind).toBe('exact');
+        if (result.kind !== 'exact') return;
+        expect(result.value.postPosition.margin).toBe(expected.position_collateral);
+        expect(result.value.postPosition.fundingIdx).toBe(expected.post_position_funding_idx);
+        expect(result.value.postPosition.borrowingIdx).toBe(expected.post_position_borrowing_idx);
+        expect(result.value.postMarket.creditPool).toBe(expected.credit_pool_delta);
+        expect(result.value.claimableCreditDelta).toBe(expected.claimable_credit_delta);
+        expect(result.value.fees.marginDebit).toBe(work.debit);
+        expect(result.value.walletPayout).toBe(expected.trader_return);
+    });
 });
 
 describe('haircuts and protocol gates', () => {
@@ -998,10 +952,7 @@ describe('haircuts and protocol gates', () => {
         });
     }
 
-    function increaseAgainst(
-        overLong: boolean,
-        notional: bigint,
-    ): PositionActionInput {
+    function increaseAgainst(overLong: boolean, notional: bigint): PositionActionInput {
         return input({
             isLong: !overLong,
             config: config({ maxUtilOpen: 800_000_000_000_000_000n }),

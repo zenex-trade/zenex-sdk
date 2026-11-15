@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { xdr, nativeToScVal, StrKey } from '@stellar/stellar-sdk';
-import {
-    parseTokenBalance,
-    tokenBalanceOrZero,
-    tokenBalanceLedgerKey,
-} from '../src/token.js';
+import { parseTokenBalance, tokenBalanceOrZero, tokenBalanceLedgerKey } from '../src/token.js';
 import { balanceMapScVal } from './helpers/market_state.js';
 
 describe('parseTokenBalance', () => {
@@ -13,14 +9,17 @@ describe('parseTokenBalance', () => {
     });
 
     it('reads a direct i128 balance', () => {
-        expect(
-            parseTokenBalance(nativeToScVal(3_000_000_000n, { type: 'i128' })),
-        ).toBe(3_000_000_000n);
+        expect(parseTokenBalance(nativeToScVal(3_000_000_000n, { type: 'i128' }))).toBe(
+            3_000_000_000n,
+        );
     });
 
     it('reads a SAC map without an amount field as 0', () => {
         const noAmount = xdr.ScVal.scvMap([
-            new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('authorized'), val: xdr.ScVal.scvBool(true) }),
+            new xdr.ScMapEntry({
+                key: xdr.ScVal.scvSymbol('authorized'),
+                val: xdr.ScVal.scvBool(true),
+            }),
         ]);
         expect(parseTokenBalance(noAmount)).toBe(0n);
     });
@@ -42,7 +41,8 @@ describe('tokenBalanceLedgerKey', () => {
         const forWallet = tokenBalanceLedgerKey(token, wallet).toXDR('base64');
         expect(forVault).not.toBe(forWallet);
         // Same token contract on both.
-        expect(tokenBalanceLedgerKey(token, vault).contractData().contract().toXDR('base64'))
-            .toBe(tokenBalanceLedgerKey(token, wallet).contractData().contract().toXDR('base64'));
+        expect(tokenBalanceLedgerKey(token, vault).contractData().contract().toXDR('base64')).toBe(
+            tokenBalanceLedgerKey(token, wallet).contractData().contract().toXDR('base64'),
+        );
     });
 });

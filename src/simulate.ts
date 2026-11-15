@@ -8,11 +8,11 @@ import {
 } from '@stellar/stellar-sdk';
 import { Network } from './index.js';
 import { ZenexError, ZenexErrorCode } from './errors.js';
+import type { ZenexErrorSource } from './errors.js';
 import { parseError } from './response_parser.js';
 
 // Dummy account for simulations (doesn't need to exist on chain)
-const SIMULATION_ACCOUNT =
-    'GDMVSPSKEUOTRFSJH2SXVUNB2JGORKDTWBMOP5OZJZP4GKRQUQWFJO4Y';
+const SIMULATION_ACCOUNT = 'GDMVSPSKEUOTRFSJH2SXVUNB2JGORKDTWBMOP5OZJZP4GKRQUQWFJO4Y';
 const SIMULATION_SEQUENCE = '123';
 
 /**
@@ -27,6 +27,11 @@ const SIMULATION_SEQUENCE = '123';
  *   whose `require_auth` sits below the root invocation, such as a router
  *   batch that creates an order, fails with `Error(Auth, InvalidAction)`.
  *   Pass `{ authMode: 'record_allow_nonroot' }` for such a call.
+ *   `errorSource` overrides which contract a failure code in 2-13 is read
+ *   for, `'token'` or `'verifier'` (see `zenexErrorFromCode`). Without it
+ *   the failed simulation's own events decide, as `parseError` describes,
+ *   and the error is `ambiguous` only when they do not show the failing
+ *   call.
  * @returns The parsed result and the ledger sequence the simulation ran
  *   against.
  * @throws {ZenexError} `InvokeHostFunctionEntryArchived` (-4) when the
@@ -39,7 +44,10 @@ export async function simulateAndParse<T>(
     network: Network,
     operation: string,
     parser: (result: string) => T,
-    options?: { authMode?: rpc.Api.SimulationAuthMode },
+    options?: {
+        authMode?: rpc.Api.SimulationAuthMode;
+        errorSource?: ZenexErrorSource;
+    },
 ): Promise<{ result: T; latestLedger: number }> {
     const stellarRpc = new rpc.Server(network.rpc, network.opts);
     const transaction = new TransactionBuilder(
@@ -65,19 +73,17 @@ export async function simulateAndParse<T>(
         );
     }
     if (rpc.Api.isSimulationError(simulation)) {
-        const decoded = parseError(simulation);
+        const decoded = parseError(simulation, options?.errorSource);
         const error = new ZenexError(
             decoded.code,
             `Simulation failed: ${decoded.message}`,
+            decoded.source,
         );
         error.cause = simulation.error;
         throw error;
     }
     if (!simulation.result?.retval) {
-        throw new ZenexError(
-            ZenexErrorCode.UnknownError,
-            'Simulation failed: no return value',
-        );
+        throw new ZenexError(ZenexErrorCode.UnknownError, 'Simulation failed: no return value');
     }
     return {
         result: parser(simulation.result.retval.toXDR('base64')),

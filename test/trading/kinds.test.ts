@@ -73,27 +73,16 @@ describe('OrderKind semantics', () => {
         expect(isTriggerOrderKind(entry.kind)).toBe(!entry.market);
     });
 
-    it.each(CASES)(
-        'derives side-aware crossing for discriminant $kind',
-        (entry) => {
-            expect(orderKindCrossing(entry.kind, true)).toBe(
-                entry.longCrossing,
-            );
-            expect(orderKindCrossing(entry.kind, false)).toBe(
-                entry.shortCrossing,
-            );
-            expect(orderKindFiresAbove(entry.kind, true)).toBe(
-                entry.longCrossing === null
-                    ? null
-                    : entry.longCrossing === 'above',
-            );
-            expect(orderKindFiresAbove(entry.kind, false)).toBe(
-                entry.shortCrossing === null
-                    ? null
-                    : entry.shortCrossing === 'above',
-            );
-        },
-    );
+    it.each(CASES)('derives side-aware crossing for discriminant $kind', (entry) => {
+        expect(orderKindCrossing(entry.kind, true)).toBe(entry.longCrossing);
+        expect(orderKindCrossing(entry.kind, false)).toBe(entry.shortCrossing);
+        expect(orderKindFiresAbove(entry.kind, true)).toBe(
+            entry.longCrossing === null ? null : entry.longCrossing === 'above',
+        );
+        expect(orderKindFiresAbove(entry.kind, false)).toBe(
+            entry.shortCrossing === null ? null : entry.shortCrossing === 'above',
+        );
+    });
 
     it('fails closed for an unknown numeric discriminant', () => {
         const unknown = 6 as OrderKind;
@@ -107,11 +96,7 @@ describe('OrderKind semantics', () => {
         ]) {
             expect(() => classify(unknown)).toThrow(/unknown order kind/i);
         }
-        expect(() => orderKindCrossing(unknown, true)).toThrow(
-            /unknown order kind/i,
-        );
-        expect(() => orderKindFiresAbove(unknown, false)).toThrow(
-            /unknown order kind/i,
-        );
+        expect(() => orderKindCrossing(unknown, true)).toThrow(/unknown order kind/i);
+        expect(() => orderKindFiresAbove(unknown, false)).toThrow(/unknown order kind/i);
     });
 });

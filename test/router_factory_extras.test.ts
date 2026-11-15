@@ -33,13 +33,15 @@ describe('MarketRouterContract extras', () => {
 
         // Create-and-fill returns Vec<Val>: [ order id, fill payout ]; raw passthrough.
         const fillResult = xdr.ScVal.scvVec([
-            xdr.ScVal.scvU32(3), nativeToScVal(9n, { type: 'i128' }),
+            xdr.ScVal.scvU32(3),
+            nativeToScVal(9n, { type: 'i128' }),
         ]).toXDR('base64');
         expect(p.createAndFill(fillResult)).toEqual([3, 9n]);
 
         // Try variant returns Vec<Val> split into CallOutcome[]; last outcome is the fill.
         const attempt = xdr.ScVal.scvVec([
-            xdr.ScVal.scvU32(3), nativeToScVal(5n, { type: 'i128' }),
+            xdr.ScVal.scvU32(3),
+            nativeToScVal(5n, { type: 'i128' }),
         ]).toXDR('base64');
         expect(p.createAndTryFill(attempt)).toEqual([
             { ok: true, value: 3, error: 0 },
@@ -66,8 +68,11 @@ describe('FactoryContract extras', () => {
                 vault_hash: new Uint8Array(32),
             },
         });
-        const create = xdr.Operation.fromXDR(op, 'base64').body()
-            .invokeHostFunctionOp().hostFunction().createContractV2();
+        const create = xdr.Operation.fromXDR(op, 'base64')
+            .body()
+            .invokeHostFunctionOp()
+            .hostFunction()
+            .createContractV2();
         const initMeta = scValToNative(create.constructorArgs()[1]);
         expect(Buffer.from(initMeta.market_hash)).toEqual(Buffer.alloc(32));
     });

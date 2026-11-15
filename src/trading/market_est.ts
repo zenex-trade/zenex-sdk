@@ -132,23 +132,11 @@ function sideEstimate(
         borrowRatePercent1h: borrow1h,
         fundingRatePercent1h: funding1h,
         charged,
-        notional: formatToken(
-            isLong ? data.notional.long : data.notional.short,
-            decimals,
-        ),
-        margin: formatToken(
-            isLong ? data.margin.long : data.margin.short,
-            decimals,
-        ),
+        notional: formatToken(isLong ? data.notional.long : data.notional.short, decimals),
+        margin: formatToken(isLong ? data.margin.long : data.margin.short, decimals),
         openInterestTokens: formatToken(own, decimals),
-        openInterestValue: formatToken(
-            mulDivFloor(own, mark, SCALAR_18),
-            decimals,
-        ),
-        openCapacity: formatTokenFloor(
-            market.openCapacity(isLong, price),
-            decimals,
-        ),
+        openInterestValue: formatToken(mulDivFloor(own, mark, SCALAR_18), decimals),
+        openCapacity: formatTokenFloor(market.openCapacity(isLong, price), decimals),
         netRatePercent1h: funding1h + (charged ? borrow1h : 0),
     };
 }
@@ -186,18 +174,14 @@ function maxWithdrawableAssets(market: Market, p: PriceData): bigint {
  * mirrors and converted to `number` at this boundary only; a keeper reads
  * the same {@link Market} methods directly for exact bigints.
  */
-export function estimateMarket(
-    market: Market,
-    price: PriceInput,
-): MarketEstimate {
+export function estimateMarket(market: Market, price: PriceInput): MarketEstimate {
     const p = marketPrice(market, price, quoteTime(market));
     const data = market.data;
     const config = market.config;
     const decimals = market.assetDecimals;
     const shareDecimals = decimals + market.vaultDecimalsOffset;
 
-    const magnitude =
-        data.fundingRate < 0n ? -data.fundingRate : data.fundingRate;
+    const magnitude = data.fundingRate < 0n ? -data.fundingRate : data.fundingRate;
     const chargedMagnitude =
         data.fundingRate === 0n
             ? 0n
@@ -209,22 +193,12 @@ export function estimateMarket(
     // maximized against the redeemer, less the vault's share of pending
     // borrowing, mirroring the fill.
     const vault = market.vaultAtomic();
-    const redeemPnl = lpNetPnl(
-        data,
-        config,
-        p,
-        market.vaultAssets,
-        market.treasuryRate,
-        true,
-    );
+    const redeemPnl = lpNetPnl(data, config, p, market.vaultAssets, market.treasuryRate, true);
     let sharePrice = 0;
     let maxRedeemableShares = 0;
     try {
         const oneShare = 10n ** BigInt(shareDecimals);
-        sharePrice = formatToken(
-            convertVaultSharesToAssets(vault, oneShare, redeemPnl),
-            decimals,
-        );
+        sharePrice = formatToken(convertVaultSharesToAssets(vault, oneShare, redeemPnl), decimals);
         const maxAssets = maxWithdrawableAssets(market, p);
         let shares = convertVaultAssetsToShares(vault, maxAssets, redeemPnl);
         if (shares > vault.totalSupply) shares = vault.totalSupply;
@@ -245,9 +219,7 @@ export function estimateMarket(
         vaultAssets: formatToken(market.vaultAssets, decimals),
         vaultSupply: formatToken(market.vaultShares, shareDecimals),
         maxLeverage:
-            config.initMargin === 0n
-                ? Infinity
-                : Number(SCALAR_18) / Number(config.initMargin),
+            config.initMargin === 0n ? Infinity : Number(SCALAR_18) / Number(config.initMargin),
         long: sideEstimate(market, p, price, true),
         short: sideEstimate(market, p, price, false),
         sharePrice,

@@ -1,12 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { StrKey, xdr, nativeToScVal } from '@stellar/stellar-sdk';
 import { parseVaultInstance } from '../../src/contracts/vault/instance.js';
-import {
-    vaultInstanceScVal,
-    balanceMapScVal,
-    contractInstance,
-    unitKey,
-} from '../helpers/market_state.js';
+import { MarketStateError } from '../../src/entries.js';
+import { vaultInstanceScVal, contractInstance, unitKey } from '../helpers/market_state.js';
 
 const ASSET = StrKey.encodeContract(Buffer.alloc(32, 3));
 const MARKET = StrKey.encodeContract(Buffer.alloc(32, 1));
@@ -39,14 +35,33 @@ describe('parseVaultInstance', () => {
 
     it('throws when asset address or share metadata is missing', () => {
         const noAsset = contractInstance([
-            new xdr.ScMapEntry({ key: unitKey('TotalSupply'), val: nativeToScVal(1n, { type: 'i128' }) }),
+            new xdr.ScMapEntry({
+                key: unitKey('TotalSupply'),
+                val: nativeToScVal(1n, { type: 'i128' }),
+            }),
         ]);
         expect(() => parseVaultInstance(noAsset)).toThrow(/missing AssetAddress|asset address/);
+        expect(() => parseVaultInstance(noAsset)).toThrow(MarketStateError);
+
+        // Meta present but without decimals.
+        const noDecimals = contractInstance([
+            new xdr.ScMapEntry({
+                key: unitKey('AssetAddress'),
+                val: nativeToScVal(ASSET, { type: 'address' }),
+            }),
+            new xdr.ScMapEntry({ key: unitKey('Meta'), val: xdr.ScVal.scvMap([]) }),
+        ]);
+        expect(() => parseVaultInstance(noDecimals)).toThrow(
+            expect.objectContaining({
+                name: 'MarketStateError',
+                code: 'MISSING_STATE',
+                message: 'vault instance Meta is missing decimals',
+            }),
+        );
     });
 
     it('rejects a non-instance value', () => {
-        expect(() => parseVaultInstance(xdr.ScVal.scvU32(1))).toThrow(
-            /contract-instance/,
-        );
+        expect(() => parseVaultInstance(xdr.ScVal.scvU32(1))).toThrow(/contract-instance/);
+        expect(() => parseVaultInstance(xdr.ScVal.scvU32(1))).toThrow(MarketStateError);
     });
 });

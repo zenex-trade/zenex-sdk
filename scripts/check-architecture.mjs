@@ -28,14 +28,12 @@ async function sourceFiles(directory, { required = false } = {}) {
     // A nested directory vanishing mid-walk (ENOENT/ENOTDIR) is a race worth
     // tolerating. Anything else — an unreadable root, EACCES on a subtree —
     // would let the gate pass without inspecting everything, so it throws.
-    const entries = await readdir(directory, { withFileTypes: true }).catch(
-        (error) => {
-            if (required || (error.code !== 'ENOENT' && error.code !== 'ENOTDIR')) {
-                throw error;
-            }
-            return [];
-        },
-    );
+    const entries = await readdir(directory, { withFileTypes: true }).catch((error) => {
+        if (required || (error.code !== 'ENOENT' && error.code !== 'ENOTDIR')) {
+            throw error;
+        }
+        return [];
+    });
     const nested = await Promise.all(
         entries.map((entry) => {
             const path = resolve(directory, entry.name);
@@ -91,10 +89,7 @@ function inspectSource(root, path, source) {
 
     function visit(node) {
         if (exact && ts.isCallExpression(node)) {
-            if (
-                ts.isIdentifier(node.expression) &&
-                FORBIDDEN_FUNCTIONS.has(node.expression.text)
-            ) {
+            if (ts.isIdentifier(node.expression) && FORBIDDEN_FUNCTIONS.has(node.expression.text)) {
                 add(
                     node,
                     'exact-number-conversion',
@@ -107,20 +102,14 @@ function inspectSource(root, path, source) {
                 node.expression.expression.text === 'Math' &&
                 node.expression.name.text === 'round'
             ) {
-                add(
-                    node,
-                    'exact-rounding',
-                    'Math.round is forbidden in exact modules',
-                );
+                add(node, 'exact-rounding', 'Math.round is forbidden in exact modules');
             }
         }
 
         const name = nodeName(node);
         if (exact && name !== undefined) {
             const normalized = normalizedName(name);
-            const forbidden = FORBIDDEN_NAMES.find((candidate) =>
-                normalized.includes(candidate),
-            );
+            const forbidden = FORBIDDEN_NAMES.find((candidate) => normalized.includes(candidate));
             if (forbidden !== undefined) {
                 add(
                     node,
@@ -173,9 +162,7 @@ export async function checkArchitecture(root = DEFAULT_ROOT) {
             ]),
         ),
     );
-    return [...sources.entries()].flatMap(([path, source]) =>
-        inspectSource(root, path, source),
-    );
+    return [...sources.entries()].flatMap(([path, source]) => inspectSource(root, path, source));
 }
 
 async function main() {
@@ -192,9 +179,6 @@ async function main() {
     process.exitCode = 1;
 }
 
-if (
-    process.argv[1] &&
-    import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
     await main();
 }

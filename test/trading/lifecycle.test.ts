@@ -247,9 +247,7 @@ describe('position lifecycle state', () => {
             value: mulDivFloor(open.notional, SCALAR_18, open.margin),
             assumptions: ['excludes unsettled funding and borrowing accruals'],
         });
-        expect(
-            positionLeverage(emptyPosition(), price(inputs), true),
-        ).toMatchObject({
+        expect(positionLeverage(emptyPosition(), price(inputs), true)).toMatchObject({
             kind: 'estimate',
             value: 0n,
         });
@@ -277,12 +275,8 @@ describe('position lifecycle state', () => {
 
     it('identifies the contract-derived underwater full close as liquidatable', () => {
         const result = liquidationState(
-            liquidationContext(
-                'position.full_close.underwater_voluntary_reject',
-            ).position,
-            liquidationContext(
-                'position.full_close.underwater_voluntary_reject',
-            ),
+            liquidationContext('position.full_close.underwater_voluntary_reject').position,
+            liquidationContext('position.full_close.underwater_voluntary_reject'),
         );
 
         expect(result).toEqual({
@@ -301,11 +295,9 @@ describe('position lifecycle state', () => {
         const chronology = liquidationContext('position.full_close.flat');
         chronology.market.accruedAt = 2n;
 
-        expect(liquidationState(chronology.position, chronology)).toMatchObject(
-            {
-                kind: 'unavailable',
-                code: 'INVALID_INPUT',
-            },
-        );
+        expect(liquidationState(chronology.position, chronology)).toMatchObject({
+            kind: 'unavailable',
+            code: 'INVALID_INPUT',
+        });
     });
 });

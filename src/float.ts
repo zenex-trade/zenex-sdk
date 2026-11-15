@@ -2,14 +2,32 @@ import { SCALAR_18 } from './math/fixed.js';
 import { formatAtomic } from './math/atomic.js';
 
 /**
- * Convert a float to a fixed-point bigint at `decimals` places.
+ * Convert a float to a fixed-point bigint at `decimals` places:
+ * `BigInt(Math.round(x * 10 ** decimals))`.
  * Pass the settlement token's decimals for a token amount, or 18 for a
- * SCALAR_18 quantity. Rounds to the nearest atomic unit.
- * @param x The float value to convert.
+ * SCALAR_18 quantity.
+ *
+ * How it rounds: the product `x * 10 ** decimals` is computed in double
+ * precision, then rounded to the nearest integer with `Math.round`, which
+ * rounds a tie toward positive infinity (`2.5` to `3`, `-2.5` to `-2`).
+ *
+ * Floats are lossy, in two ways this cannot repair:
+ *
+ * - Most decimals have no exact double, so the product can land just below
+ *   the value the text reads as: `toFixed(1.005, 2)` is `100n`, not `101n`.
+ * - A double carries about 15 to 17 significant digits. Past
+ *   `Number.MAX_SAFE_INTEGER` (about 9e15) atomic units the result is only
+ *   the nearest representable value, so an 18-decimal price above roughly
+ *   0.009 is not exact to the last digits.
+ *
+ * It is the right tool for a number that is already a float, such as a
+ * slider position or a computed size. When the value starts as text and
+ * must reach the chain exactly, parse the text with `parseAtomic` instead,
+ * which never rounds.
+ *
+ * @param x The float value to convert. Must be finite.
  * @param decimals The number of decimal places the result is scaled to.
- * @deprecated A JavaScript number cannot represent every decimal exactly, so
- * this can round. Never use it for a value that goes into a transaction. Use
- * `parseAtomic` with decimal text instead.
+ * @throws {RangeError} if the product is not finite (`NaN` or an infinity).
  */
 export function toFixed(x: number, decimals: number): bigint {
     return BigInt(Math.round(x * 10 ** decimals));
@@ -148,9 +166,6 @@ function textExceeds(text: string, value: bigint, decimals: number): boolean {
     if (match[4] === undefined && fraction.length > decimals) return true;
     const magnitude = BigInt(match[2] + fraction);
     const digits = match[1] === '-' ? -magnitude : magnitude;
-    const shift =
-        BigInt(match[4] ?? 0) - BigInt(fraction.length) + BigInt(decimals);
-    return shift >= 0n
-        ? digits * 10n ** shift > value
-        : digits > value * 10n ** -shift;
+    const shift = BigInt(match[4] ?? 0) - BigInt(fraction.length) + BigInt(decimals);
+    return shift >= 0n ? digits * 10n ** shift > value : digits > value * 10n ** -shift;
 }

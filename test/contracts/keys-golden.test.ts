@@ -46,10 +46,7 @@ function voidCase(name: string): xdr.ScSpecUdtUnionCaseV0 {
     );
 }
 
-function tupleCase(
-    name: string,
-    type: xdr.ScSpecTypeDef[],
-): xdr.ScSpecUdtUnionCaseV0 {
+function tupleCase(name: string, type: xdr.ScSpecTypeDef[]): xdr.ScSpecUdtUnionCaseV0 {
     return xdr.ScSpecUdtUnionCaseV0.scSpecUdtUnionCaseTupleV0(
         new xdr.ScSpecUdtUnionCaseTupleV0({ doc: '', name, type }),
     );
@@ -102,10 +99,7 @@ function specScVal(
     return built.spec.nativeToScVal({ tag, values }, built.ty);
 }
 
-function expectedContractDataKey(
-    contractId: string,
-    keyScVal: xdr.ScVal,
-): xdr.LedgerKey {
+function expectedContractDataKey(contractId: string, keyScVal: xdr.ScVal): xdr.LedgerKey {
     return xdr.LedgerKey.contractData(
         new xdr.LedgerKeyContractData({
             contract: Address.fromString(contractId).toScAddress(),
@@ -145,10 +139,7 @@ describe('golden ledger-key encoding vs @stellar/stellar-sdk spec encoder', () =
         for (const [user, isLong, built] of cases) {
             expect(b64(built), `Position(${user}, ${isLong})`).toBe(
                 b64(
-                    expectedContractDataKey(
-                        MARKET,
-                        specScVal(dataKey, 'Position', [user, isLong]),
-                    ),
+                    expectedContractDataKey(MARKET, specScVal(dataKey, 'Position', [user, isLong])),
                 ),
             );
         }
@@ -156,12 +147,7 @@ describe('golden ledger-key encoding vs @stellar/stellar-sdk spec encoder', () =
 
     it('Order / VaultOrder (user, id) keys match the spec encoder', () => {
         expect(b64(marketOrderLedgerKey(MARKET, ACCOUNT_USER, 7))).toBe(
-            b64(
-                expectedContractDataKey(
-                    MARKET,
-                    specScVal(dataKey, 'Order', [ACCOUNT_USER, 7]),
-                ),
-            ),
+            b64(expectedContractDataKey(MARKET, specScVal(dataKey, 'Order', [ACCOUNT_USER, 7]))),
         );
         expect(b64(marketVaultOrderLedgerKey(MARKET, ACCOUNT_USER, 9))).toBe(
             b64(
@@ -176,10 +162,7 @@ describe('golden ledger-key encoding vs @stellar/stellar-sdk spec encoder', () =
     it('OrderCounter / ClaimableCredit (user) keys match the spec encoder', () => {
         expect(b64(marketOrderCounterLedgerKey(MARKET, ACCOUNT_USER))).toBe(
             b64(
-                expectedContractDataKey(
-                    MARKET,
-                    specScVal(dataKey, 'OrderCounter', [ACCOUNT_USER]),
-                ),
+                expectedContractDataKey(MARKET, specScVal(dataKey, 'OrderCounter', [ACCOUNT_USER])),
             ),
         );
         expect(b64(marketClaimableCreditLedgerKey(MARKET, ACCOUNT_USER))).toBe(
@@ -194,12 +177,7 @@ describe('golden ledger-key encoding vs @stellar/stellar-sdk spec encoder', () =
 
     it('token Balance(vault) persistent key matches the spec encoder', () => {
         expect(b64(tokenBalanceLedgerKey(ASSET, VAULT))).toBe(
-            b64(
-                expectedContractDataKey(
-                    ASSET,
-                    specScVal(tokenKey, 'Balance', [VAULT]),
-                ),
-            ),
+            b64(expectedContractDataKey(ASSET, specScVal(tokenKey, 'Balance', [VAULT]))),
         );
     });
 
@@ -210,9 +188,7 @@ describe('golden ledger-key encoding vs @stellar/stellar-sdk spec encoder', () =
             expect(key.contractData().key().switch()).toBe(
                 xdr.ScValType.scvLedgerKeyContractInstance(),
             );
-            expect(
-                Address.fromScAddress(key.contractData().contract()).toString(),
-            ).toBe(id);
+            expect(Address.fromScAddress(key.contractData().contract()).toString()).toBe(id);
         }
     });
 });

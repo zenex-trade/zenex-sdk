@@ -1,11 +1,5 @@
 import { marketRouterSpec } from '../contract_specs.js';
-import {
-    Address,
-    Contract,
-    contract,
-    xdr,
-    scValToNative,
-} from '@stellar/stellar-sdk';
+import { Address, Contract, contract, xdr, scValToNative } from '@stellar/stellar-sdk';
 import {
     Call,
     CallOutcome,
@@ -22,8 +16,8 @@ function priceBuffer(price: Buffer | Uint8Array): Buffer {
 }
 
 /**
- * Operation builder for the Zenex market router (zenex-util-contracts
- * `market-router`): generic batching plus the create-and-fill flows. The
+ * Operation builder for the Zenex market router, one of the Zenex utility
+ * contracts: generic batching plus the create-and-fill flows. The
  * router collects no fee and needs no authorization. Every method returns a
  * base64-encoded XDR operation.
  *
@@ -45,16 +39,12 @@ export class MarketRouterContract extends Contract {
         multicall: (result: string): unknown[] =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         multicallTry: (result: string): CallOutcome[] =>
-            (xdr.ScVal.fromXDR(result, 'base64').vec() ?? []).map(
-                parseCallOutcome,
-            ),
+            (xdr.ScVal.fromXDR(result, 'base64').vec() ?? []).map(parseCallOutcome),
         // --- create-and-fill flows ---
         createAndFill: (result: string): unknown[] =>
             scValToNative(xdr.ScVal.fromXDR(result, 'base64')),
         createAndTryFill: (result: string): CallOutcome[] =>
-            (xdr.ScVal.fromXDR(result, 'base64').vec() ?? []).map(
-                parseCallOutcome,
-            ),
+            (xdr.ScVal.fromXDR(result, 'base64').vec() ?? []).map(parseCallOutcome),
     };
 
     /**
@@ -66,10 +56,7 @@ export class MarketRouterContract extends Contract {
      * order.
      */
     multicall(calls: Call[]): string {
-        return this.call(
-            'multicall',
-            xdr.ScVal.scvVec(calls.map(callToScVal)),
-        ).toXDR('base64');
+        return this.call('multicall', xdr.ScVal.scvVec(calls.map(callToScVal))).toXDR('base64');
     }
 
     /**
@@ -83,10 +70,7 @@ export class MarketRouterContract extends Contract {
      * contract error code. A non-contract failure reads `UNTYPED_FAILURE`.
      */
     multicallTry(calls: Call[]): string {
-        return this.call(
-            'multicall_try',
-            xdr.ScVal.scvVec(calls.map(callToScVal)),
-        ).toXDR('base64');
+        return this.call('multicall_try', xdr.ScVal.scvVec(calls.map(callToScVal))).toXDR('base64');
     }
 
     /**
@@ -111,12 +95,7 @@ export class MarketRouterContract extends Contract {
      * - Propagates the market contract's `create_order` and `execute_order`
      *   errors.
      */
-    createAndFill(
-        calls: Call[],
-        user: string,
-        keeper: string,
-        price: Buffer | Uint8Array,
-    ): string {
+    createAndFill(calls: Call[], user: string, keeper: string, price: Buffer | Uint8Array): string {
         return this.call(
             'create_and_fill',
             xdr.ScVal.scvVec(calls.map(callToScVal)),

@@ -33,14 +33,11 @@ export function parseAtomic(value: string, decimals: number): bigint {
 
     const fraction = match[3] ?? '';
     if (fraction.length > places) {
-        throw new RangeError(
-            `decimal value exceeds the configured ${places} decimal places`,
-        );
+        throw new RangeError(`decimal value exceeds the configured ${places} decimal places`);
     }
     const scale = 10n ** BigInt(places);
     const whole = BigInt(match[2]) * scale;
-    const fractional =
-        fraction.length === 0 ? 0n : BigInt(fraction.padEnd(places, '0'));
+    const fractional = fraction.length === 0 ? 0n : BigInt(fraction.padEnd(places, '0'));
     const magnitude = whole + fractional;
     return match[1] === '-' ? -magnitude : magnitude;
 }
@@ -69,7 +66,5 @@ export function formatAtomic(value: bigint, decimals: number): string {
     const whole = padded.slice(0, -places);
     const fraction = padded.slice(-places).replace(/0+$/, '');
     const sign = negative ? '-' : '';
-    return fraction.length === 0
-        ? `${sign}${whole}`
-        : `${sign}${whole}.${fraction}`;
+    return fraction.length === 0 ? `${sign}${whole}` : `${sign}${whole}.${fraction}`;
 }

@@ -4,7 +4,12 @@ import { FULL_CLOSE, OrderKind, Status } from '../../contracts/market/types.js';
 import type { AdlState, MarketData, Position, MarketConfig } from '../../contracts/market/types.js';
 import { BPS_DENOMINATOR, addI128, checkedBps, mulDivFloor, subI128 } from '../../math/fixed.js';
 import type { PriceData } from './math.js';
-import { isIncreaseOrderKind, isMarketOrderKind, orderExecutionPrice, validateOrder } from './order.js';
+import {
+    isIncreaseOrderKind,
+    isMarketOrderKind,
+    orderExecutionPrice,
+    validateOrder,
+} from './order.js';
 import { quotePositionAction } from './quote.js';
 import type { PositionAction, PositionActionOutcome } from './quote.js';
 import type { VaultAtomicState } from './vault.js';
@@ -61,7 +66,6 @@ function fillPrice(snapshot: MarketContext, price: PriceData): PriceData {
         ? price
         : { bid: terminal, ask: terminal, publishTime: snapshot.ledgerTime };
 }
-
 
 /**
  * The outcome when one order is applied to the snapshot's position at a
@@ -164,14 +168,8 @@ export function applyOrder(
     // that disallows opens (only Active allows them past the Frozen/Retired
     // creation gate) or the side's ADL flag (`execute_order`, #705). The
     // halt outranks the uncrossed bound, which the contract judges later.
-    if (
-        isMarketOrderKind(order.kind) &&
-        isIncreaseOrderKind(order.kind) &&
-        order.notional > 0n
-    ) {
-        const sideAdl = order.isLong
-            ? snapshot.adl?.long
-            : snapshot.adl?.short;
+    if (isMarketOrderKind(order.kind) && isIncreaseOrderKind(order.kind) && order.notional > 0n) {
+        const sideAdl = order.isLong ? snapshot.adl?.long : snapshot.adl?.short;
         if (snapshot.status !== Status.Active || sideAdl === true) {
             return {
                 kind: 'gate',

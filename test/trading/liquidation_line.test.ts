@@ -38,7 +38,7 @@ function loneLong(notional: bigint, margin: bigint, tokens: bigint) {
             tokens: pair(tokens, 0n),
         },
     });
-    const position = new MarketPosition(true, margin, notional, tokens, 0n, 0n, 0n, 0n, 0n, []);
+    const position = new MarketPosition({ ...MarketPosition.zero(true), margin, notional, tokens });
     return { market, position };
 }
 
@@ -88,8 +88,6 @@ describe('the liquidation price sits on the gate', () => {
     it('feeds the estimate the same price', () => {
         const { market, position } = loneLong(unit(1000), unit(50), tokens);
         const estimate = estimatePosition(market, position, px(0.21), 0n);
-        expect(estimate.liquidationPrice).toBe(
-            Number(position.liquidationPrice(market)) / 1e18,
-        );
+        expect(estimate.liquidationPrice).toBe(Number(position.liquidationPrice(market)) / 1e18);
     });
 });

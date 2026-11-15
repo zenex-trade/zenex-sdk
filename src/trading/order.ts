@@ -1,7 +1,9 @@
 import type { OrderParams } from '../contracts/router/types.js';
-import { ZenexError, zenexErrorFromGate } from '../errors.js';
+import type { ZenexError } from '../errors.js';
+import { zenexErrorFromGate } from './internal/gate.js';
 import { OrderKind } from '../contracts/market/types.js';
-import { formatPrice, formatToken, formatTokenFloor } from '../float.js';
+import { formatPrice, formatToken } from '../float.js';
+import { SCALAR_18 } from '../math/fixed.js';
 import type { Market } from './market.js';
 import { MarketPosition } from './position.js';
 import type { PositionEstimate } from './position_est.js';
@@ -9,10 +11,7 @@ import { estimatePosition } from './position_est.js';
 import { Price, marketPrice, quoteTime, resolvePrice } from './price.js';
 import type { PriceInput } from './price.js';
 import type { MarketContext } from './internal/apply.js';
-import {
-    applyOrder,
-    orderPriceBound as enginePriceBound,
-} from './internal/apply.js';
+import { applyOrder, orderPriceBound as enginePriceBound } from './internal/apply.js';
 import { entryTokens, quoteTradeFees } from './internal/math.js';
 import {
     closePositionParams,
@@ -30,12 +29,26 @@ import {
     isTriggerOrderKind,
 } from './internal/order.js';
 
-export {
-    isDecreaseOrderKind,
-    isIncreaseOrderKind,
-    isMarketOrderKind,
-    isTriggerOrderKind,
-};
+export { isDecreaseOrderKind, isIncreaseOrderKind, isMarketOrderKind, isTriggerOrderKind };
+
+/**
+ * Default lifetime of a market order, in ledgers: about five minutes. A
+ * market order is meant to fill at once, so a short lifetime keeps a missed
+ * one from filling later at a price the user no longer expects.
+ */
+export const DEFAULT_ORDER_TTL_LEDGERS = 60;
+
+/**
+ * The `expiration` of an order that never expires: the largest `u32` ledger
+ * sequence. A trigger order (limit and stop opens, take-profit, stop-loss)
+ * rests until the price crosses it or the owner cancels it, so it does not
+ * expire by default.
+ *
+ * The contract bounds `expiration` only from below: creation rejects one
+ * behind the current ledger (`OrderExpired`, 731), an order fills through
+ * its `expiration` ledger inclusive, and any later `u32` is accepted.
+ */
+export const NO_EXPIRY_LEDGER = 0xffff_ffff;
 
 /**
  * Order factory bound to one ticket's context: a market snapshot, an owner,
@@ -44,13 +57,24 @@ export {
  * sign the identical object.
  *
  * The bound market supplies what a caller would otherwise wire by hand:
- * `expiration` derives from `market.ledger + ttlLedgers`, and a fill bound
- * derives from `slippageBps` against the execution price the kind fills at.
+ * `expiration` derives from `market.ledger` plus a lifetime, and a fill
+ * bound derives from `slippageBps` against the execution price the kind
+ * fills at. The lifetime depends on the kind: market orders (`openMarket`,
+ * `closePosition`, `decrease`, `addMargin`, `withdrawMargin`) live
+ * `ttlLedgers`, 60 by default, and trigger orders (`openLimit`, `openStop`,
+ * `takeProfit`, `stopLoss`) never expire unless `triggerTtlLedgers` is set.
+ * An expired order no longer fills and its escrow stays in the market until
+ * the order is cancelled. An expiration never exceeds
+ * {@link NO_EXPIRY_LEDGER}, the largest ledger the contract can take.
  * The methods also encode the contract's conventions that `OrderKind` alone
  * does not express: the `FULL_CLOSE` sentinel, margin-only orders as
  * `notional: 0n`, and the trigger-direction rules for entries and TP/SL.
  */
 export class OrderIntent {
+    /**
+     * @throws {RangeError} if `ttlLedgers`, or a `triggerTtlLedgers` that is
+     *   given, is not a finite, non-negative integer.
+     */
     constructor(
         /** Market snapshot expirations and price bounds derive from. */
         public market: Market,
@@ -58,19 +82,52 @@ export class OrderIntent {
         public user: string,
         /** Side every built order targets. */
         public isLong: boolean,
-        /** Default order lifetime in ledgers (`expiration = market.ledger + ttlLedgers`). */
-        public ttlLedgers: number = 60,
+        /** Lifetime of a market order in ledgers (`expiration = market.ledger + ttlLedgers`). Defaults to {@link DEFAULT_ORDER_TTL_LEDGERS}, 60. */
+        public ttlLedgers: number = DEFAULT_ORDER_TTL_LEDGERS,
         /** Default maximum adverse slippage, basis points (10_000 = 100%). 0 = unbounded, matching the contract's own default. */
         public slippageBps: bigint = 0n,
-    ) {}
+        /**
+         * Lifetime of a trigger order in ledgers
+         * (`expiration = market.ledger + triggerTtlLedgers`): limit and stop
+         * opens, take-profit and stop-loss. Left out, a trigger order never
+         * expires: its `expiration` is {@link NO_EXPIRY_LEDGER}. `ttlLedgers`
+         * does not apply to these kinds.
+         */
+        public triggerTtlLedgers?: number,
+    ) {
+        // A lifetime that is not a whole number of ledgers would reach the
+        // signer as an `expiration` no `u32` encodes.
+        requireLifetime('ttlLedgers', ttlLedgers);
+        if (triggerTtlLedgers !== undefined) {
+            requireLifetime('triggerTtlLedgers', triggerTtlLedgers);
+        }
+    }
 
-    private base(): { market: string; user: string; isLong: boolean; expiration: number } {
+    /**
+     * The fields every order shares. `expiration` is the market's ledger
+     * plus the lifetime, held at {@link NO_EXPIRY_LEDGER}: the contract
+     * takes a `u32`, and a larger number would not encode.
+     */
+    private base(ttlLedgers: number = this.ttlLedgers): {
+        market: string;
+        user: string;
+        isLong: boolean;
+        expiration: number;
+    } {
         return {
             market: this.market.id,
             user: this.user,
             isLong: this.isLong,
-            expiration: this.market.ledger + this.ttlLedgers,
+            expiration: Math.min(this.market.ledger + ttlLedgers, NO_EXPIRY_LEDGER),
         };
+    }
+
+    /** The base of a trigger order: as `base`, with the trigger lifetime, or no expiry without one. */
+    private triggerBase(): ReturnType<OrderIntent['base']> {
+        if (this.triggerTtlLedgers === undefined) {
+            return { ...this.base(), expiration: NO_EXPIRY_LEDGER };
+        }
+        return this.base(this.triggerTtlLedgers);
     }
 
     /** @throws {RangeError} when a slippage bound is configured but no price was given to measure it against. */
@@ -123,14 +180,11 @@ export class OrderIntent {
         triggerPrice: bigint;
     }): OrderParams {
         return openLimitParams({
-            ...this.base(),
+            ...this.triggerBase(),
             notional: args.notional,
             margin: args.margin,
             triggerPrice: args.triggerPrice,
-            priceBound: this.bound(
-                OrderKind.LimitIncrease,
-                Price.from(args.triggerPrice),
-            ),
+            priceBound: this.bound(OrderKind.LimitIncrease, Price.from(args.triggerPrice)),
         });
     }
 
@@ -139,7 +193,7 @@ export class OrderIntent {
      * breakout entry that a long fills at or above the trigger and a short
      * at or below. The bound is measured against the trigger, so a nonzero
      * `slippageBps` caps how far past it a gap may fill; beyond that the
-     * order rests (#741) until the price comes back.
+     * order rests (error 741) until the price comes back.
      */
     openStop(args: {
         /** Size to open, token-dec. */
@@ -150,14 +204,11 @@ export class OrderIntent {
         triggerPrice: bigint;
     }): OrderParams {
         return openStopParams({
-            ...this.base(),
+            ...this.triggerBase(),
             notional: args.notional,
             margin: args.margin,
             triggerPrice: args.triggerPrice,
-            priceBound: this.bound(
-                OrderKind.StopIncrease,
-                Price.from(args.triggerPrice),
-            ),
+            priceBound: this.bound(OrderKind.StopIncrease, Price.from(args.triggerPrice)),
         });
     }
 
@@ -217,7 +268,7 @@ export class OrderIntent {
         slippageBps?: bigint;
     }): OrderParams {
         return takeProfitParams({
-            ...this.base(),
+            ...this.triggerBase(),
             triggerPrice: args.triggerPrice,
             notional: args.notional,
             priceBound: this.bound(
@@ -234,7 +285,7 @@ export class OrderIntent {
      * and a short at or above. A stop exists to exit, so it fills unbounded
      * unless the call passes `slippageBps`; the intent's own default does not
      * apply. A nonzero bound keeps a stop that gaps past it from filling
-     * (#741) until the price recovers.
+     * (error 741) until the price recovers.
      */
     stopLoss(args: {
         /** Crossing price, 18-dec. Must be positive. */
@@ -245,7 +296,7 @@ export class OrderIntent {
         slippageBps?: bigint;
     }): OrderParams {
         return stopLossParams({
-            ...this.base(),
+            ...this.triggerBase(),
             triggerPrice: args.triggerPrice,
             notional: args.notional,
             priceBound: this.bound(
@@ -254,6 +305,15 @@ export class OrderIntent {
                 args.slippageBps ?? 0n,
             ),
         });
+    }
+}
+
+/** @throws {RangeError} unless `ledgers` is a finite, non-negative integer. */
+function requireLifetime(name: 'ttlLedgers' | 'triggerTtlLedgers', ledgers: number): void {
+    if (!Number.isInteger(ledgers) || ledgers < 0) {
+        throw new RangeError(
+            `${name} must be a finite, non-negative integer of ledgers, got ${String(ledgers)}`,
+        );
     }
 }
 
@@ -329,8 +389,7 @@ export function marketContext(
     user = '',
 ): MarketContext {
     const ledgerTime = quoteTime(market, now);
-    const stamp =
-        position.pricedAt > ledgerTime ? position.pricedAt : ledgerTime;
+    const stamp = position.pricedAt > ledgerTime ? position.pricedAt : ledgerTime;
     return {
         subject: { user, isLong: position.isLong },
         ledger: market.ledger,
@@ -352,7 +411,7 @@ export function marketContext(
  * you will sign, e.g. from `OrderIntent`) to `position` at `price`. Runs
  * the exact fill engine, so what you preview is what the chain would do.
  * This catches what creation does not: the chain accepts orders that can
- * never fill (a decrease that would break the margin gate, #713).
+ * never fill (a decrease that would break the margin gate, error 713).
  *
  * @param price The fill price. A bare bigint is published at the quote
  *   time, but never behind the position's last fill. A market's terminal
@@ -370,8 +429,7 @@ export function previewOrder(
     const decimals = market.assetDecimals;
     const execFee = formatToken(market.config.execFee, decimals);
     const escrowedAtomic =
-        (isIncreaseOrderKind(order.kind) ? order.margin : 0n) +
-        market.config.execFee;
+        (isIncreaseOrderKind(order.kind) ? order.margin : 0n) + market.config.execFee;
     const escrowed = formatToken(escrowedAtomic, decimals);
 
     const empty = {
@@ -421,33 +479,100 @@ export function previewOrder(
         baseFee: formatToken(fees.base, decimals),
         impactFee: formatToken(fees.impact, decimals),
         execFee,
-        totalFees: formatToken(
-            fees.base + fees.impact + market.config.execFee,
-            decimals,
-        ),
+        totalFees: formatToken(fees.base + fees.impact + market.config.execFee, decimals),
         funding: formatToken(fees.funding, decimals),
         borrowing: formatToken(fees.borrowing, decimals),
         escrowed,
         executionPrice: formatPrice(outcome.executionPrice),
         payout: formatToken(outcome.walletPayout, decimals),
-        position: estimatePosition(
-            market.withData(outcome.postMarket),
-            post,
-            price,
-            at,
-        ),
+        position: estimatePosition(market.withData(outcome.postMarket), post, price, at),
     };
 }
 
 const LEVERAGE_SCALE = 10_000n;
 
 /**
- * Largest margin a wallet balance affords at a chosen leverage: solves
- * `balance = margin + tradeFee(margin * leverage) + execFee` against the
- * fee model (base fee at the side's rate plus the size-quadratic impact
- * fee). The order ticket's "Max" button. Token units, floor-rounded so the
- * value round-trips through an input field and `parseAtomic` without
- * exceeding the true maximum. `0` when the balance cannot cover the fees.
+ * The order {@link maxMarginForBalance} sizes for a wallet balance, in
+ * atomic token units. `notional` and `orderMargin` go into the order;
+ * `positionMargin` is what the position holds once it has filled.
+ */
+export interface MaxMarginForBalance {
+    /**
+     * The `margin` argument of the order, token-dec: `balance - execFee`.
+     * The contract escrows `margin + execFee` at creation, so this margin
+     * takes the whole balance out of the wallet. `0n` when the balance
+     * affords no position.
+     */
+    readonly orderMargin: bigint;
+    /**
+     * The `notional` argument of the order, token-dec: the largest size the
+     * position margin it leaves carries at the leverage and at the
+     * initial-margin floor. One atomic unit more does not fit.
+     */
+    readonly notional: bigint;
+    /**
+     * The margin the position holds after the fill, token-dec:
+     * `orderMargin` less the base and impact fees the fill debits from it.
+     * Show this as the position's margin. It is NOT the order's `margin`:
+     * passed as one, the fill debits the fees from it again, and at the
+     * maximum leverage the fill fails the initial-margin gate
+     * (`InsufficientMargin`, 713).
+     */
+    readonly positionMargin: bigint;
+}
+
+/** Upper bound on the leverage argument before scaling: above every leverage a market allows. */
+const MAX_LEVERAGE_INPUT = 1_000_000;
+
+/**
+ * The largest open a wallet balance affords at a chosen leverage, spending
+ * the whole balance. The order ticket's "Max" button.
+ *
+ * On chain an increase escrows `margin + execFee` from the wallet
+ * (`Order::escrow_amount`), and the fill then debits the base and impact
+ * fees from that margin (`Position::increase`), so the position keeps
+ * `margin - fees`. Two margins follow, and the result names both:
+ *
+ * - `orderMargin = balance - execFee` is what the order carries.
+ * - `positionMargin = orderMargin - tradeFee(notional)` is what the
+ *   position holds.
+ *
+ * `notional` is the largest size that fits: the position margin it leaves
+ * carries it at the leverage (`positionMargin * leverage >= notional`) and
+ * at the market's initial margin (`positionMargin >= ceil(initMargin *
+ * notional)`). It is searched against the fee model (base fee at the side's
+ * rate plus the size-quadratic impact fee) in exact integers, and
+ * `notional + 1` does not fit. That makes it the largest size of all
+ * whenever a larger open never pays a smaller fee, which holds apart from
+ * the one-unit rounding of the skew split. Build the order from the result:
+ *
+ * ```ts
+ * const max = maxMarginForBalance(market, true, balance, 5, price);
+ * const order = intent.openMarket({ notional: max.notional, margin: max.orderMargin, price });
+ * ```
+ *
+ * That order escrows exactly `balance`, and its fill leaves a position of
+ * `max.positionMargin` at no more than the chosen leverage. A leverage above
+ * what the market's initial margin allows is capped at that maximum.
+ *
+ * The fees are those of an open on a flat side, with the snapshot's book
+ * and fee side at the fill. Under those conditions the fill passes the
+ * initial-margin gate (`InsufficientMargin`, 713) at any leverage. It can
+ * still fail it when the book flips the fee side before the fill, or on an
+ * increase of an existing position, which also settles its pending funding
+ * and borrowing out of the margin. The other gates are not solved for: the
+ * position and order minimums, the open-interest and utilization caps, and
+ * the maintenance gate (`PositionLiquidatable`, 723), which a fill fails
+ * when the fees of closing the new position would leave it under its
+ * maintenance margin. Preview the order.
+ *
+ * All three values are exact integers in atomic token units. For an input
+ * field, format one with `formatTokenFloor(value, market.assetDecimals)`.
+ *
+ * @param leverage Notional over position margin, read to four decimals.
+ * @returns The order's `notional` and `margin` and the resulting position
+ *   margin. All `0n` when the balance does not cover the execution fee, the
+ *   leverage is not a positive finite number, or no size is affordable.
  */
 export function maxMarginForBalance(
     market: Market,
@@ -455,35 +580,58 @@ export function maxMarginForBalance(
     balance: bigint,
     leverage: number,
     price: PriceInput,
-): number {
-    if (balance <= market.config.execFee || leverage <= 0) return 0;
+): MaxMarginForBalance {
+    const none = { orderMargin: 0n, notional: 0n, positionMargin: 0n };
+    if (balance <= market.config.execFee) return none;
+    if (!Number.isFinite(leverage) || leverage <= 0) return none;
     const priceData = marketPrice(market, price, quoteTime(market));
     const entry = isLong ? priceData.ask : priceData.bid;
-    if (entry <= 0n) return 0;
-    const leverageScaled = BigInt(Math.round(leverage * Number(LEVERAGE_SCALE)));
+    if (entry <= 0n) return none;
+    // The initial-margin floor caps the leverage far below this bound (the
+    // contract's smallest initial margin is 0.1%, 1000x), so the clamp only
+    // keeps a huge finite input from overflowing to Infinity when scaled.
+    const leverageScaled = BigInt(
+        Math.round(Math.min(leverage, MAX_LEVERAGE_INPUT) * Number(LEVERAGE_SCALE)),
+    );
+    const initMargin = market.config.initMargin;
     const budget = balance - market.config.execFee;
 
-    const cost = (margin: bigint): bigint => {
-        const notional = (margin * leverageScaled) / LEVERAGE_SCALE;
+    const tradeFees = (notional: bigint): bigint => {
         const tokens = entryTokens(notional, entry, isLong);
-        const fees = quoteTradeFees(
-            market.data,
-            market.config,
-            isLong,
-            notional,
-            tokens,
-        );
-        return margin + fees.base + fees.impact;
+        const fees = quoteTradeFees(market.data, market.config, isLong, notional, tokens);
+        return fees.base + fees.impact;
+    };
+    // Whether the order of this size and the whole budget as its margin
+    // fits: the position keeps the budget less the fees, and that margin
+    // carries the size at the leverage and at the initial-margin floor,
+    // `ceil(initMargin * notional) <= margin`, the gate the fill measures.
+    const fits = (notional: bigint): boolean => {
+        const margin = budget - tradeFees(notional);
+        if (margin < 0n) return false;
+        if (notional * LEVERAGE_SCALE > margin * leverageScaled) return false;
+        return initMargin <= 0n || notional * initMargin <= margin * SCALAR_18;
     };
 
-    // cost() grows monotonically with margin, so binary search the largest
-    // margin whose all-in cost still fits the budget.
+    // No size above what the whole budget carries fits, since the position
+    // margin never exceeds the budget.
+    let high = (budget * leverageScaled) / LEVERAGE_SCALE;
+    if (initMargin > 0n) {
+        const floor = (budget * SCALAR_18) / initMargin;
+        if (floor < high) high = floor;
+    }
+    // Size zero fits and `high + 1` does not, and the search keeps both:
+    // `low` fits and `high + 1` does not. So it ends on a size that fits
+    // whose successor does not, whatever the fees do in between.
     let low = 0n;
-    let high = budget;
     while (low < high) {
         const mid = low + (high - low + 1n) / 2n;
-        if (cost(mid) <= budget) low = mid;
+        if (fits(mid)) low = mid;
         else high = mid - 1n;
     }
-    return formatTokenFloor(low, market.assetDecimals);
+    if (low <= 0n) return none;
+    return {
+        orderMargin: budget,
+        notional: low,
+        positionMargin: budget - tradeFees(low),
+    };
 }

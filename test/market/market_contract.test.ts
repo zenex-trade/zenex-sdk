@@ -61,7 +61,14 @@ describe('MarketContract', () => {
 
     it('createOrder builds create_order with the exact 8-arg order and types', () => {
         const operation = contract.createOrder(
-            USER, true, OrderKind.LimitIncrease, 100n, 10n, 55n, 200n, 12345,
+            USER,
+            true,
+            OrderKind.LimitIncrease,
+            100n,
+            10n,
+            55n,
+            200n,
+            12345,
         );
         const { fn, rawArgs, args } = decodeInvoke(operation);
         expect(fn).toBe('create_order');
@@ -77,10 +84,28 @@ describe('MarketContract', () => {
     });
 
     it('createOrderCall encodes identically to createOrder', () => {
-        const call = contract.createOrderCall(USER, false, OrderKind.StopDecrease, 1n, 2n, 3n, 4n, 5);
+        const call = contract.createOrderCall(
+            USER,
+            false,
+            OrderKind.StopDecrease,
+            1n,
+            2n,
+            3n,
+            4n,
+            5,
+        );
         expect(call.func).toBe('create_order');
         expect(call.contract).toBe(CONTRACT_ID);
-        expect(call.args.map((arg) => scValToNative(arg))).toEqual([USER, false, 5, 1n, 2n, 3n, 4n, 5]);
+        expect(call.args.map((arg) => scValToNative(arg))).toEqual([
+            USER,
+            false,
+            5,
+            1n,
+            2n,
+            3n,
+            4n,
+            5,
+        ]);
     });
 
     it('every OrderKind encodes its u32 discriminant in the built XDR', () => {
@@ -93,7 +118,9 @@ describe('MarketContract', () => {
             [OrderKind.StopDecrease, 5],
         ];
         for (const [kind, discriminant] of kindByDiscriminant) {
-            const { rawArgs } = decodeInvoke(contract.createOrder(USER, true, kind, 1n, 1n, 0n, 0n, 1));
+            const { rawArgs } = decodeInvoke(
+                contract.createOrder(USER, true, kind, 1n, 1n, 0n, 0n, 1),
+            );
             expect(rawArgs[2].switch().name).toBe('scvU32');
             expect(rawArgs[2].u32()).toBe(discriminant);
         }
@@ -232,9 +259,19 @@ describe('MarketContract', () => {
             feedId,
             config: makeConfig(),
         };
-        const operation = MarketContract.deploy(USER, Buffer.alloc(32, 9), deployArgs, undefined, 'hex');
+        const operation = MarketContract.deploy(
+            USER,
+            Buffer.alloc(32, 9),
+            deployArgs,
+            undefined,
+            'hex',
+        );
         const decoded = xdr.Operation.fromXDR(operation, 'base64');
-        const createContract = decoded.body().invokeHostFunctionOp().hostFunction().createContractV2();
+        const createContract = decoded
+            .body()
+            .invokeHostFunctionOp()
+            .hostFunction()
+            .createContractV2();
         const constructorArgs = createContract.constructorArgs();
         expect(constructorArgs).toHaveLength(7);
         // feed_id crosses as BytesN<32>.
@@ -253,9 +290,9 @@ describe('MarketContract', () => {
             feedId: Buffer.alloc(31),
             config: makeConfig(),
         };
-        expect(() =>
-            MarketContract.deploy(USER, Buffer.alloc(32, 9), deployArgs),
-        ).toThrow(/32 bytes/);
+        expect(() => MarketContract.deploy(USER, Buffer.alloc(32, 9), deployArgs)).toThrow(
+            /32 bytes/,
+        );
     });
 
     it('upgrade builds with the wasm hash first, then the operator', () => {

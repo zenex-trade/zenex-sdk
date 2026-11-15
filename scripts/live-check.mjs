@@ -1,12 +1,23 @@
-// Validate the SDK against a LIVE stack, read-only.
+// Validate the SDK against a LIVE market, read-only.
 //
-//   npm run build && node scripts/live-check.mjs
+//   npm run build
+//   ZENEX_RPC=https://your-rpc ZENEX_MARKET=C... node scripts/live-check.mjs
 //
-// Loads the deployed xlm-usd market through `Market.load`, cross-checks every
-// loaded field against the contract's own view calls (simulated on the same
-// live wasms the SDK's committed specs were generated from), and runs the
-// estimate tier end to end at a chain-derived price. Reads and simulations
-// only — nothing is signed or submitted.
+// Loads the market through `Market.load`, cross-checks every loaded field
+// against the contract's own view calls (simulated against the deployed
+// contracts), and runs the estimate tier end to end at a chain-derived
+// price. Reads and simulations only: nothing is signed or submitted.
+//
+// Environment:
+//   ZENEX_RPC          required. Stellar RPC URL for the network.
+//   ZENEX_MARKET       required. The market contract id.
+//   ZENEX_PASSPHRASE   network passphrase. Defaults to mainnet
+//                      ('Public Global Stellar Network ; September 2015');
+//                      testnet is 'Test SDF Network ; September 2015'.
+//   ZENEX_VAULT        vault and token, to check them against the market's
+//   ZENEX_TOKEN        own wiring. Default: read from the market instance.
+//   ZENEX_PROBE_USER   an account with no state on the market, for the
+//                      empty-user checks.
 
 import {
     Market,
@@ -23,16 +34,22 @@ import {
 } from '../dist/esm/index.js';
 import { rpc } from '@stellar/stellar-sdk';
 
-// Defaults target the mainnet xlm-usd market (contracts release 644a4c4)
-// through the homelab mainnet RPC. Override with env vars to point elsewhere,
-// such as a testnet stack (passphrase 'Test SDF Network ; September 2015'):
-//   ZENEX_RPC, ZENEX_PASSPHRASE, ZENEX_MARKET, ZENEX_VAULT, ZENEX_TOKEN,
-//   ZENEX_PROBE_USER
+function required(name) {
+    const value = process.env[name];
+    if (!value) {
+        console.error(`${name} is not set. See the header of scripts/live-check.mjs.`);
+        process.exit(2);
+    }
+    return value;
+}
+
+const RPC_URL = required('ZENEX_RPC');
+const MARKET_ID = required('ZENEX_MARKET');
 const NETWORK = {
-    rpc: process.env.ZENEX_RPC ?? 'http://192.168.2.150:8000',
-    passphrase:
-        process.env.ZENEX_PASSPHRASE ?? 'Public Global Stellar Network ; September 2015',
-    opts: { allowHttp: true },
+    rpc: RPC_URL,
+    passphrase: process.env.ZENEX_PASSPHRASE ?? 'Public Global Stellar Network ; September 2015',
+    // Plain HTTP only when the URL asks for it, such as a local node.
+    opts: { allowHttp: RPC_URL.startsWith('http://') },
 };
 
 let failures = 0;
@@ -45,20 +62,33 @@ function fmt(value) {
     return typeof value === 'bigint' ? value.toString() : JSON.stringify(value);
 }
 
+// The market instance names its own vault, token, oracle and treasury. An
+// address given in the environment replaces the resolved one, so the load's
+// identity check compares it with the market's wiring.
+const resolved = await Market.resolveContracts(NETWORK, MARKET_ID);
 const contracts = {
-    market: process.env.ZENEX_MARKET ?? 'CAOZCITWHWAXH5FRU4EULQ5EN2HMTCHICRNC4R5ZAOVD7XHCCQSJ42IB',
-    vault: process.env.ZENEX_VAULT ?? 'CB2MX4WXJHOHCTDTN5DCFC7G3TLFLOYLCRCINPK7G2A3EUVW2AYVA56N',
-    token: process.env.ZENEX_TOKEN ?? 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75',
+    ...resolved,
+    vault: process.env.ZENEX_VAULT ?? resolved.vault,
+    token: process.env.ZENEX_TOKEN ?? resolved.token,
 };
-console.log(`\nLive market xlm-usd via ${NETWORK.rpc}`);
-console.log(`  market  ${contracts.market}\n  vault   ${contracts.vault}\n  token   ${contracts.token}\n`);
+console.log(`\nLive market via ${NETWORK.rpc}`);
+console.log(
+    `  market  ${contracts.market}\n  vault   ${contracts.vault}\n  token   ${contracts.token}\n`,
+);
 
 // --- 1. Load through the SDK ------------------------------------------------
 const market = await Market.load(NETWORK, contracts);
 console.log(`Market.load — ledger ${market.ledger}`);
-check('wiring verified against instance', market.vault === contracts.vault && market.token === contracts.token);
+check(
+    'wiring verified against instance',
+    market.vault === contracts.vault && market.token === contracts.token,
+);
 check('status decoded', Number.isInteger(market.status), `status=${market.status}`);
-check('config decoded', market.config.maxOpenInterest > 0n, `maxOI=${fmt(market.config.maxOpenInterest)}`);
+check(
+    'config decoded',
+    market.config.maxOpenInterest > 0n,
+    `maxOI=${fmt(market.config.maxOpenInterest)}`,
+);
 check('asset decimals', market.assetDecimals > 0, `decimals=${market.assetDecimals}`);
 
 // --- 2. Cross-check every loaded field against the contract's own views -----
@@ -82,7 +112,10 @@ check(
     JSON.stringify(cfg.result, (k, v) => (typeof v === 'bigint' ? v.toString() : v)) ===
         JSON.stringify(market.config, (k, v) => (typeof v === 'bigint' ? v.toString() : v)),
 );
-check('get_adl matches', adl.result.long === market.adl.long && adl.result.short === market.adl.short);
+check(
+    'get_adl matches',
+    adl.result.long === market.adl.long && adl.result.short === market.adl.short,
+);
 check(
     'total_assets equals the entries-read vault balance',
     totalAssets.result === market.vaultAssets,
@@ -138,27 +171,47 @@ console.log(`\nPrice: ${fmt(price.value)} (${price.source})`);
 // --- 4. Estimate tier end to end at the live state --------------------------
 const est = estimateMarket(market, price.value);
 console.log('\nestimateMarket');
-console.log(`  funding/1h=${est.fundingRatePercent1h}% charge/1h=${est.fundingChargeRatePercent1h}% maxLev=${est.maxLeverage}`);
-console.log(`  long : util=${est.long.utilizationPercent}% oi=${est.long.openInterestValue} cap=${est.long.openCapacity} net/1h=${est.long.netRatePercent1h}%`);
-console.log(`  short: util=${est.short.utilizationPercent}% oi=${est.short.openInterestValue} cap=${est.short.openCapacity} net/1h=${est.short.netRatePercent1h}%`);
-console.log(`  sharePrice=${est.sharePrice} netPnl=${est.netPnl} maxRedeem=${est.maxRedeemableShares}`);
-check('estimateMarket finite', [est.sharePrice, est.long.utilizationPercent, est.long.netRatePercent1h].every(Number.isFinite));
-check('share price sane', est.sharePrice > 0 && est.sharePrice < 100, `sharePrice=${est.sharePrice}`);
+console.log(
+    `  funding/1h=${est.fundingRatePercent1h}% charge/1h=${est.fundingChargeRatePercent1h}% maxLev=${est.maxLeverage}`,
+);
+console.log(
+    `  long : util=${est.long.utilizationPercent}% oi=${est.long.openInterestValue} cap=${est.long.openCapacity} net/1h=${est.long.netRatePercent1h}%`,
+);
+console.log(
+    `  short: util=${est.short.utilizationPercent}% oi=${est.short.openInterestValue} cap=${est.short.openCapacity} net/1h=${est.short.netRatePercent1h}%`,
+);
+console.log(
+    `  sharePrice=${est.sharePrice} netPnl=${est.netPnl} maxRedeem=${est.maxRedeemableShares}`,
+);
+check(
+    'estimateMarket finite',
+    [est.sharePrice, est.long.utilizationPercent, est.long.netRatePercent1h].every(Number.isFinite),
+);
+check(
+    'share price sane',
+    est.sharePrice > 0 && est.sharePrice < 100,
+    `sharePrice=${est.sharePrice}`,
+);
 
 // --- 5. User path with a fresh (empty) subject ------------------------------
 const PROBE_USER =
-    process.env.ZENEX_PROBE_USER ??
-    'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7';
+    process.env.ZENEX_PROBE_USER ?? 'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7';
 const { market: m2, user } = await Market.loadWithUser(NETWORK, contracts, PROBE_USER);
 console.log(`\nMarket.loadWithUser(${PROBE_USER.slice(0, 8)}…)`);
 check('one batched read returns both', m2.ledger > 0 && user.userId === PROBE_USER);
-check('empty subject reads zeroed', !user.long.isOpen() && !user.short.isOpen() && user.orderCounter === 1);
+check(
+    'empty subject reads zeroed',
+    !user.long.isOpen() && !user.short.isOpen() && user.orderCounter === 1,
+);
 check('claimable capped at pool', user.claimable(market) === 0n);
 const orders = await user.loadOrders(NETWORK);
 check('loadOrders empty for fresh subject', orders.length === 0);
 
 const posEst = estimatePosition(market, user.long, price.value);
-check('estimatePosition zeroes on a flat position', posEst.notional === 0 && posEst.equity === 0 && posEst.maxWithdrawableMargin === 0);
+check(
+    'estimatePosition zeroes on a flat position',
+    posEst.notional === 0 && posEst.equity === 0 && posEst.maxWithdrawableMargin === 0,
+);
 
 // --- 6. Order pre-flight against the live book ------------------------------
 const decimals = market.assetDecimals;
@@ -166,18 +219,27 @@ const unitAmount = 10n ** BigInt(decimals);
 const intent = new OrderIntent(market, PROBE_USER, true);
 const open = intent.openMarket({ notional: 100n * unitAmount, margin: 20n * unitAmount });
 const preview = previewOrder(market, user.long, open, price.value);
-console.log(`\npreviewOrder(open 100 @ ${market.status === 0 ? 'Active' : 'status ' + market.status})`);
-console.log(`  outcome=${preview.outcome}${preview.reason ? ` (${preview.reason})` : ''} fees=${preview.totalFees} escrow=${preview.escrowed}`);
+console.log(
+    `\npreviewOrder(open 100 @ ${market.status === 0 ? 'Active' : 'status ' + market.status})`,
+);
+console.log(
+    `  outcome=${preview.outcome}${preview.reason ? ` (${preview.reason})` : ''} fees=${preview.totalFees} escrow=${preview.escrowed}`,
+);
 check('pre-flight returns a verdict', ['fills', 'rests', 'gate'].includes(preview.outcome));
 if (preview.outcome === 'fills') {
-    check('resulting position embedded', preview.position !== undefined && preview.position.notional === 100);
+    check(
+        'resulting position embedded',
+        preview.position !== undefined && preview.position.notional === 100,
+    );
 }
 
 // --- 7. Vault order intent against the live vault ---------------------------
 const dep = VaultOrderIntent.create(market, PROBE_USER, 0, 100n * unitAmount, 50n, price.value);
 const expected = dep.expectedOut(market, price.value);
 const verdict = dep.fills(market, price.value);
-console.log(`\nVaultOrderIntent.deposit(100) — expectedOut=${fmt(expected)} minOut=${fmt(dep.minOut)} fills=${JSON.stringify(verdict, (k, v) => (typeof v === 'bigint' ? v.toString() : v))}`);
+console.log(
+    `\nVaultOrderIntent.deposit(100) — expectedOut=${fmt(expected)} minOut=${fmt(dep.minOut)} fills=${JSON.stringify(verdict, (k, v) => (typeof v === 'bigint' ? v.toString() : v))}`,
+);
 check('minOut below expected', dep.minOut > 0n && dep.minOut <= expected);
 check('operation builds', dep.toOperation().length > 0);
 

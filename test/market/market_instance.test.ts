@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { StrKey, xdr } from '@stellar/stellar-sdk';
 import { parseMarketInstance } from '../../src/contracts/market/instance.js';
+import { MarketStateError } from '../../src/entries.js';
 import { Status } from '../../src/contracts/market/types.js';
 import {
     makeConfig,
@@ -87,11 +88,16 @@ describe('parseMarketInstance', () => {
             new xdr.ScMapEntry({ key: unitKey('FeedId'), val: xdr.ScVal.scvBytes(TEST_FEED_ID) }),
         ]);
         expect(() => parseMarketInstance(partial)).toThrow(/missing/);
+        expect(() => parseMarketInstance(partial)).toThrow(MarketStateError);
+        expect(() => parseMarketInstance(partial)).toThrow(
+            expect.objectContaining({ code: 'MISSING_STATE' }),
+        );
     });
 
     it('rejects a non-instance value', () => {
+        expect(() => parseMarketInstance(xdr.ScVal.scvU32(1))).toThrow(/contract-instance/);
         expect(() => parseMarketInstance(xdr.ScVal.scvU32(1))).toThrow(
-            /contract-instance/,
+            expect.objectContaining({ name: 'MarketStateError', code: 'MISSING_STATE' }),
         );
     });
 });

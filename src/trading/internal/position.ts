@@ -1,7 +1,13 @@
 import { DELIST_DEADLINE, Status } from '../../contracts/market/types.js';
 import type { MarketData, Position, SidePair, MarketConfig } from '../../contracts/market/types.js';
 import { SCALAR_18, addI128, mulDivCeil, mulDivFloor, subI128 } from '../../math/fixed.js';
-import { advanceMarketAccruals, exactPositionPnl, marketSidePnl, quoteTradeFees, sideCapacity } from './math.js';
+import {
+    advanceMarketAccruals,
+    exactPositionPnl,
+    marketSidePnl,
+    quoteTradeFees,
+    sideCapacity,
+} from './math.js';
 import type { PriceData } from './math.js';
 import { estimate, exact, unavailable } from './quote.js';
 import type { PositionQuoteContext, QuoteResult } from './quote.js';
@@ -85,11 +91,7 @@ function pairValue(pair: SidePair, isLong: boolean): bigint {
     return isLong ? pair.long : pair.short;
 }
 
-function accruedAmount(
-    notional: bigint,
-    marketIndex: bigint,
-    positionIndex: bigint,
-): bigint {
+function accruedAmount(notional: bigint, marketIndex: bigint, positionIndex: bigint): bigint {
     return mulDivCeil(notional, subI128(marketIndex, positionIndex), SCALAR_18);
 }
 
@@ -101,9 +103,7 @@ function accruedAmount(
  * (funding, borrowing) and `Market::trade_fees` (base, impact);
  * `marginDebit` mirrors `Fees::debit`.
  */
-export function quotePositionFees(
-    input: QuotePositionFeesInput,
-): QuotedPositionFees {
+export function quotePositionFees(input: QuotePositionFeesInput): QuotedPositionFees {
     const notional = input.position.notional;
     const funding = accruedAmount(
         notional,
@@ -125,10 +125,7 @@ export function quotePositionFees(
     );
     const paidFunding = funding > 0n ? funding : 0n;
     const earnedFunding = funding < 0n ? subI128(0n, funding) : 0n;
-    const marginDebit = addI128(
-        addI128(trade.base, trade.impact),
-        addI128(borrowing, paidFunding),
-    );
+    const marginDebit = addI128(addI128(trade.base, trade.impact), addI128(borrowing, paidFunding));
 
     return {
         fees: {
@@ -156,40 +153,23 @@ function side(pair: { long: bigint; short: bigint }, isLong: boolean): bigint {
     return isLong ? pair.long : pair.short;
 }
 
-
 function haircutPnl(
     pnl: bigint,
-    context: Pick<
-        PositionQuoteContext,
-        'market' | 'config' | 'price' | 'vaultAssets' | 'isLong'
-    >,
+    context: Pick<PositionQuoteContext, 'market' | 'config' | 'price' | 'vaultAssets' | 'isLong'>,
 ): bigint {
     if (pnl <= 0n) return pnl;
-    const pending = marketSidePnl(
-        context.market,
-        context.price,
-        context.isLong,
-        true,
-    );
-    const allowance = sideCapacity(
-        context.vaultAssets,
-        context.config.maxPnlTrader,
-    );
+    const pending = marketSidePnl(context.market, context.price, context.isLong, true);
+    const allowance = sideCapacity(context.vaultAssets, context.config.maxPnlTrader);
     return pending > allowance ? mulDivFloor(pnl, allowance, pending) : pnl;
 }
 
 function caughtUnavailable<T>(error: unknown): QuoteResult<T> {
-    if (
-        error instanceof RangeError &&
-        error.message.includes(OVERFLOW_MESSAGE)
-    ) {
+    if (error instanceof RangeError && error.message.includes(OVERFLOW_MESSAGE)) {
         return unavailable('CONTRACT_OVERFLOW', error.message);
     }
     return unavailable(
         'INVALID_INPUT',
-        error instanceof Error
-            ? error.message
-            : 'invalid position lifecycle input',
+        error instanceof Error ? error.message : 'invalid position lifecycle input',
     );
 }
 
@@ -226,14 +206,9 @@ export function positionLeverage(
 ): QuoteResult<bigint> {
     try {
         if (position.notional === 0n) {
-            return estimate(0n, [
-                'excludes unsettled funding and borrowing accruals',
-            ]);
+            return estimate(0n, ['excludes unsettled funding and borrowing accruals']);
         }
-        const equity = addI128(
-            position.margin,
-            exactPositionPnl(position, price, isLong),
-        );
+        const equity = addI128(position.margin, exactPositionPnl(position, price, isLong));
         if (equity <= 0n) {
             return unavailable(
                 'INVALID_INPUT',
@@ -264,11 +239,7 @@ export function settledPositionEquity(
     isLong: boolean,
 ): bigint {
     const notional = position.notional;
-    const funding = accruedAmount(
-        notional,
-        side(market.fundingIdx, isLong),
-        position.fundingIdx,
-    );
+    const funding = accruedAmount(notional, side(market.fundingIdx, isLong), position.fundingIdx);
     const borrowing = accruedAmount(
         notional,
         side(market.borrowingIdx, isLong),
@@ -345,11 +316,7 @@ export function liquidationState(
         ).market;
         const notional = position.notional;
         if (notional === 0n) {
-            return unavailable(
-                'CONTRACT_GATE',
-                'contract error #720: position not found',
-                720,
-            );
+            return unavailable('CONTRACT_GATE', 'contract error #720: position not found', 720);
         }
         const settledEquity = settledPositionEquity(
             position,
@@ -402,9 +369,7 @@ export function positionPnl(
     isLong: boolean,
 ): bigint {
     if (isLong) {
-        return (
-            mulDivFloor(position.tokens, price, priceScalar) - position.notional
-        );
+        return mulDivFloor(position.tokens, price, priceScalar) - position.notional;
     }
     return position.notional - mulDivCeil(position.tokens, price, priceScalar);
 }
@@ -424,14 +389,8 @@ export function pendingFunding(
     marketData: MarketData,
     isLong: boolean,
 ): bigint {
-    const marketIdx = isLong
-        ? marketData.fundingIdx.long
-        : marketData.fundingIdx.short;
-    return mulDivCeil(
-        position.notional,
-        marketIdx - position.fundingIdx,
-        SCALAR_18,
-    );
+    const marketIdx = isLong ? marketData.fundingIdx.long : marketData.fundingIdx.short;
+    return mulDivCeil(position.notional, marketIdx - position.fundingIdx, SCALAR_18);
 }
 
 /**
@@ -448,14 +407,8 @@ export function pendingBorrowing(
     marketData: MarketData,
     isLong: boolean,
 ): bigint {
-    const marketIdx = isLong
-        ? marketData.borrowingIdx.long
-        : marketData.borrowingIdx.short;
-    return mulDivCeil(
-        position.notional,
-        marketIdx - position.borrowingIdx,
-        SCALAR_18,
-    );
+    const marketIdx = isLong ? marketData.borrowingIdx.long : marketData.borrowingIdx.short;
+    return mulDivCeil(position.notional, marketIdx - position.borrowingIdx, SCALAR_18);
 }
 
 /**
@@ -534,22 +487,12 @@ export function liquidationPrice(
         return 0n;
     }
     // maintenance margin = ceil(notional * maintenance_margin / SCALAR_18) (apply_factor_ceil).
-    const mm = mulDivCeil(
-        position.notional,
-        config.maintenanceMargin,
-        SCALAR_18,
-    );
+    const mm = mulDivCeil(position.notional, config.maintenanceMargin, SCALAR_18);
     const funding = pendingFunding(position, marketData, isLong);
     const paidFunding = funding > 0n ? funding : 0n;
     const borrowing = pendingBorrowing(position, marketData, isLong);
     // A full close's fee depends on the book, not on the price.
-    const close = quoteTradeFees(
-        marketData,
-        config,
-        isLong,
-        -position.notional,
-        -position.tokens,
-    );
+    const close = quoteTradeFees(marketData, config, isLong, -position.notional, -position.tokens);
     const debit = paidFunding + borrowing + close.base + close.impact;
 
     // Solve settled(price) == mm, where settled = margin - debit + pnl and

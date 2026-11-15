@@ -5,12 +5,15 @@ export { loadTreasuryInstance, loadTreasuryRate } from './treasury.js';
 export { Price, reduceSpread } from './price.js';
 export type { PriceInput } from './price.js';
 export { Market } from './market.js';
-export type { MarketContracts } from './market.js';
+export type { MarketContracts, MarketFields, ReadonlyMarketData } from './market.js';
 export { MarketUser } from './user.js';
-export type { MarketUserEntry, PendingOrder } from './user.js';
+export type { MarketUserEntry, MarketUserFields, PendingOrder } from './user.js';
 export { MarketPosition } from './position.js';
+export type { MarketPositionFields } from './position.js';
 export {
     OrderIntent,
+    DEFAULT_ORDER_TTL_LEDGERS,
+    NO_EXPIRY_LEDGER,
     maxMarginForBalance,
     previewOrder,
     isDecreaseOrderKind,
@@ -19,7 +22,7 @@ export {
     isTriggerOrderKind,
     orderPriceBound,
 } from './order.js';
-export type { OrderEstimate } from './order.js';
+export type { MaxMarginForBalance, OrderEstimate } from './order.js';
 export { estimateMarket } from './market_est.js';
 export type { MarketEstimate, SideRatesEstimate } from './market_est.js';
 export { estimatePosition } from './position_est.js';

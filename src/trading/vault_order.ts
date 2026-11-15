@@ -1,12 +1,8 @@
 import { Status, VaultOrderKind } from '../contracts/market/types.js';
-import { ZenexError, ZenexErrorCode, zenexErrorFromGate } from '../errors.js';
+import { ZenexError, ZenexErrorCode } from '../errors.js';
+import { zenexErrorFromGate } from './internal/gate.js';
 import { MarketContract } from '../contracts/market/contract.js';
-import {
-    BPS_DENOMINATOR,
-    SCALAR_18,
-    checkedBps,
-    mulDivFloor,
-} from '../math/fixed.js';
+import { BPS_DENOMINATOR, SCALAR_18, checkedBps, mulDivFloor } from '../math/fixed.js';
 import type { Market } from './market.js';
 import type { PriceInput } from './price.js';
 import { marketPrice, quoteTime } from './price.js';
@@ -29,10 +25,7 @@ function sentinelFor(code: string): number {
 
 /** @internal An unavailable quote as the `ZenexError` it stands for. */
 function gateError(quote: Extract<QuoteResult<unknown>, { kind: 'unavailable' }>): ZenexError {
-    return zenexErrorFromGate(
-        quote.contractCode ?? sentinelFor(quote.code),
-        quote.reason,
-    );
+    return zenexErrorFromGate(quote.contractCode ?? sentinelFor(quote.code), quote.reason);
 }
 
 /** @internal A retired market redeems inside `create_vault_order`, fee-free. */
@@ -70,11 +63,7 @@ function expectedFillOutput(
             accrued.treasuryRate,
             false,
         );
-        return convertVaultAssetsToShares(
-            accrued.vaultAtomic(),
-            amount - fee,
-            pnl,
-        );
+        return convertVaultAssetsToShares(accrued.vaultAtomic(), amount - fee, pnl);
     }
     const pnl = lpNetPnl(
         accrued.data,
@@ -150,16 +139,10 @@ export class VaultOrderIntent {
         let minOut = 0n;
         if (bps > 0n && !redeemsAtCreation(market, kind)) {
             if (price === undefined) {
-                throw new RangeError(
-                    'slippageBps is set, so a price is required to derive minOut',
-                );
+                throw new RangeError('slippageBps is set, so a price is required to derive minOut');
             }
             const expected = expectedFillOutput(market, kind, amount, price, now);
-            minOut = mulDivFloor(
-                expected,
-                BPS_DENOMINATOR - bps,
-                BPS_DENOMINATOR,
-            );
+            minOut = mulDivFloor(expected, BPS_DENOMINATOR - bps, BPS_DENOMINATOR);
         }
         return new VaultOrderIntent(market.id, user, kind, amount, minOut);
     }
@@ -219,10 +202,7 @@ export class VaultOrderIntent {
         | { fills: false; invalid: ZenexError }
         | { fills: false; rejected: { quoted: bigint } }
         | { fills: false; block: ZenexError } {
-        if (
-            this.kind !== VaultOrderKind.Deposit &&
-            this.kind !== VaultOrderKind.Redeem
-        ) {
+        if (this.kind !== VaultOrderKind.Deposit && this.kind !== VaultOrderKind.Redeem) {
             return { fills: false, invalid: new ZenexError(ZenexErrorCode.UnknownKind) };
         }
         const createdAt = quoteTime(market, now);
@@ -239,10 +219,7 @@ export class VaultOrderIntent {
         if (creation.kind === 'unavailable') {
             return { fills: false, invalid: gateError(creation) };
         }
-        if (
-            creation.kind === 'exact' &&
-            creation.value.kind === 'retiredImmediateRedeem'
-        ) {
+        if (creation.kind === 'exact' && creation.value.kind === 'retiredImmediateRedeem') {
             return { fills: true };
         }
 

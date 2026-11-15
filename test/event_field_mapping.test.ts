@@ -74,20 +74,25 @@ function eventLiterals(domain: Domain): { iface: string; enumName: string; liter
             const override = domain.overrides?.[struct];
             const iface = ownable
                 ? `${struct}Event<ZenexContractType.${domain.contractType}>`
-                : override?.iface ?? `${domain.prefix}${struct}Event`;
+                : (override?.iface ?? `${domain.prefix}${struct}Event`);
             const enumName = ownable ? 'OwnableEventType' : `${domain.prefix}EventType`;
             const member = override?.member ?? struct;
             const fields = [
                 ...event.params().map((param) => {
                     const wire = param.name().toString();
-                    return ownable ? camel(wire) : domain.renames?.[wire] ?? camel(wire);
+                    return ownable ? camel(wire) : (domain.renames?.[wire] ?? camel(wire));
                 }),
-                ...(ownable ? [] : domain.derived?.[struct] ?? []),
+                ...(ownable ? [] : (domain.derived?.[struct] ?? [])),
             ];
             const body = fields.map((field) => `${field}: v`).join(', ');
-            const literal = `{ ...base, contractType: ZenexContractType.${domain.contractType}, `
-                + `eventType: ${enumName}.${member}${body ? `, ${body}` : ''} }`;
-            return { iface: iface.replace(/<.*>/, ''), enumName, literal: `${literal} satisfies ${iface}` };
+            const literal =
+                `{ ...base, contractType: ZenexContractType.${domain.contractType}, ` +
+                `eventType: ${enumName}.${member}${body ? `, ${body}` : ''} }`;
+            return {
+                iface: iface.replace(/<.*>/, ''),
+                enumName,
+                literal: `${literal} satisfies ${iface}`,
+            };
         });
 }
 

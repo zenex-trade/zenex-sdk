@@ -2,22 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { StrKey } from '@stellar/stellar-sdk';
 import { SCALAR_18 } from '../../src/math/fixed.js';
 import { makeConfig } from '../helpers/market_state.js';
-import type {
-    MarketData,
-    SidePair,
-    MarketConfig,
-} from '../../src/contracts/market/types.js';
+import type { MarketData, SidePair, MarketConfig } from '../../src/contracts/market/types.js';
 import { OrderKind, Status, VaultOrderKind } from '../../src/contracts/market/types.js';
 import { Market } from '../../src/trading/market.js';
 import { MarketPosition } from '../../src/trading/position.js';
+import type { MarketPositionFields } from '../../src/trading/position.js';
 import { Price } from '../../src/trading/price.js';
 import { estimateMarket } from '../../src/trading/market_est.js';
 import { estimatePosition } from '../../src/trading/position_est.js';
 import {
     OrderIntent,
+    marketContext,
     maxMarginForBalance,
     previewOrder,
 } from '../../src/trading/order.js';
+import { applyOrder } from '../../src/trading/internal/apply.js';
 import { VaultOrderIntent } from '../../src/trading/vault_order.js';
 import {
     SECONDS_PER_YEAR,
@@ -46,7 +45,6 @@ const TOKEN = StrKey.encodeContract(Buffer.alloc(32, 3));
 const ORACLE = StrKey.encodeContract(Buffer.alloc(32, 4));
 const TREASURY = StrKey.encodeContract(Buffer.alloc(32, 5));
 const USER = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 6));
-const NETWORK = { rpc: 'http://localhost', passphrase: 'test' };
 
 function marketData(overrides: Partial<MarketData> = {}): MarketData {
     return {
@@ -70,27 +68,25 @@ function loadedMarket(
     config: Partial<MarketConfig> = {},
     vaultAssets: bigint = unit(1000),
 ): Market {
-    return new Market(
-        NETWORK,
-        MARKET,
-        100,
-        VAULT,
-        TOKEN,
-        ORACLE,
-        TREASURY,
-        undefined,
-        Buffer.alloc(32, 1),
-        Status.Active,
-        { ...makeConfig(), ...config },
-        marketData(data),
-        { long: false, short: false },
-        undefined,
-        undefined,
+    return new Market({
+        id: MARKET,
+        ledger: 100,
+        vault: VAULT,
+        token: TOKEN,
+        oracle: ORACLE,
+        treasury: TREASURY,
+        feedId: Buffer.alloc(32, 1),
+        status: Status.Active,
+        config: { ...makeConfig(), ...config },
+        data: marketData(data),
+        adl: { long: false, short: false },
         vaultAssets,
-        vaultAssets * SHARE_SCALE,
-        SHARE_DECIMALS_OFFSET,
-        TOKEN_DECIMALS,
-    );
+        vaultShares: vaultAssets * SHARE_SCALE,
+        vaultDecimalsOffset: SHARE_DECIMALS_OFFSET,
+        assetDecimals: TOKEN_DECIMALS,
+        treasuryRate: 0n,
+        spreadReductionFactor: 0n,
+    });
 }
 
 /** A market whose aggregates carry the standard long position. */
@@ -106,24 +102,22 @@ function marketWithBook(): Market {
     );
 }
 
-function openPosition(
-    overrides: Partial<MarketPosition> = {},
-): MarketPosition {
-    const position = new MarketPosition(
-        true,
-        unit(100),
-        unit(1000),
+function openPosition(overrides: Partial<MarketPositionFields> = {}): MarketPosition {
+    return new MarketPosition({
+        isLong: true,
+        margin: unit(100),
+        notional: unit(1000),
         // `to_tokens` = notional * SCALAR_18 / price, so with a token-dec
         // notional and an 18-dec price the base size is at TOKEN decimals.
-        unit(10),
-        0n,
-        0n,
-        0n,
-        0n,
-        0n,
-        [],
-    );
-    return Object.assign(position, overrides);
+        tokens: unit(10),
+        fundingIdx: 0n,
+        borrowingIdx: 0n,
+        lockedNotional: 0n,
+        unlocksAt: 0n,
+        pricedAt: 0n,
+        decreaseOrders: [],
+        ...overrides,
+    });
 }
 
 describe('float format helpers', () => {
@@ -167,10 +161,7 @@ describe('Price', () => {
 
 describe('estimateMarket', () => {
     it('reports per-side utilization and the rate the side would pay', () => {
-        const est = estimateMarket(
-            loadedMarket({ tokens: pair(unit(6), unit(2)) }),
-            px(10),
-        );
+        const est = estimateMarket(loadedMarket({ tokens: pair(unit(6), unit(2)) }), px(10));
 
         expect(est.long.utilizationPercent).toBeGreaterThan(0);
         expect(est.long.borrowRatePercent1h).toBeGreaterThan(0);
@@ -180,17 +171,13 @@ describe('estimateMarket', () => {
     });
 
     it('charges both sides on a token tie, matching the accrual', () => {
-        const est = estimateMarket(
-            loadedMarket({ tokens: pair(unit(4), unit(4)) }),
-            px(10),
-        );
+        const est = estimateMarket(loadedMarket({ tokens: pair(unit(4), unit(4)) }), px(10));
         expect(est.long.charged).toBe(true);
         expect(est.short.charged).toBe(true);
     });
 
     it('signs funding by who pays', () => {
-        const at = (rate: bigint) =>
-            estimateMarket(loadedMarket({ fundingRate: rate }), px(10));
+        const at = (rate: bigint) => estimateMarket(loadedMarket({ fundingRate: rate }), px(10));
         expect(at(500n).fundingRatePercent1h).toBeGreaterThan(0);
         expect(at(-500n).fundingRatePercent1h).toBeLessThan(0);
         expect(at(0n).fundingRatePercent1h).toBe(0);
@@ -212,13 +199,11 @@ describe('estimateMarket', () => {
 
     it('derives max leverage from the initial margin', () => {
         expect(
-            estimateMarket(loadedMarket({}, { initMargin: SCALAR_18 / 10n }), px(10))
-                .maxLeverage,
+            estimateMarket(loadedMarket({}, { initMargin: SCALAR_18 / 10n }), px(10)).maxLeverage,
         ).toBe(10);
-        expect(
-            estimateMarket(loadedMarket({}, { initMargin: 0n }), px(10))
-                .maxLeverage,
-        ).toBe(Infinity);
+        expect(estimateMarket(loadedMarket({}, { initMargin: 0n }), px(10)).maxLeverage).toBe(
+            Infinity,
+        );
     });
 
     it('splits the net hourly rate: payer pays the floored rate, receiver earns the re-spread', () => {
@@ -235,8 +220,7 @@ describe('estimateMarket', () => {
             px(10),
         );
         const fundingPct1h = (1_000_000 / 1e18) * 3600 * 100;
-        const fundingLeg = (side: typeof est.long): number =>
-            side.fundingRatePercent1h;
+        const fundingLeg = (side: typeof est.long): number => side.fundingRatePercent1h;
         expect(est.long.netRatePercent1h).toBeGreaterThan(0);
         expect(fundingLeg(est.long)).toBeCloseTo(fundingPct1h, 12);
         expect(fundingLeg(est.short)).toBeCloseTo(-fundingPct1h / 2, 12);
@@ -289,12 +273,7 @@ describe('estimateMarket', () => {
 describe('estimatePosition', () => {
     it('formats each field at its own scale', () => {
         // 10 tokens entered at 100.0, marked at 110.
-        const view = estimatePosition(
-            marketWithBook(),
-            openPosition(),
-            px(110),
-            0n,
-        );
+        const view = estimatePosition(marketWithBook(), openPosition(), px(110), 0n);
 
         expect(view.notional).toBe(1000);
         expect(view.margin).toBe(100);
@@ -333,23 +312,13 @@ describe('estimatePosition', () => {
     });
 
     it('reads a crossed liquidation price as negative distance', () => {
-        const view = estimatePosition(
-            marketWithBook(),
-            openPosition({ margin: 1n }),
-            px(50),
-            0n,
-        );
+        const view = estimatePosition(marketWithBook(), openPosition({ margin: 1n }), px(50), 0n);
         expect(view.liquidationDistancePercent).toBeLessThan(0);
         expect(view.healthFactor).toBeLessThan(1);
     });
 
     it('floors leverage at zero once equity is gone', () => {
-        const view = estimatePosition(
-            marketWithBook(),
-            openPosition({ margin: 0n }),
-            px(1),
-            0n,
-        );
+        const view = estimatePosition(marketWithBook(), openPosition({ margin: 0n }), px(1), 0n);
         expect(view.equity).toBeLessThanOrEqual(0);
         expect(view.leverage).toBe(0);
     });
@@ -359,8 +328,7 @@ describe('estimatePosition', () => {
             lockedNotional: unit(400),
             unlocksAt: 2_000n,
         });
-        const build = (now: bigint) =>
-            estimatePosition(marketWithBook(), locked, px(100), now);
+        const build = (now: bigint) => estimatePosition(marketWithBook(), locked, px(100), now);
         expect(build(1_999n).unlockedNotional).toBe(600);
         // At the boundary the lock has expired.
         expect(build(2_000n).unlockedNotional).toBe(1000);
@@ -376,7 +344,7 @@ describe('previewOrder', () => {
         expect(order.expiration).toBe(market.ledger + 60);
         expect(order.priceBound).toBe(0n);
 
-        const flat = new MarketPosition(true, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []);
+        const flat = MarketPosition.zero(true);
         const preview = previewOrder(market, flat, order, px(100), 1n);
         expect(preview.outcome).toBe('fills');
         expect(preview.executionPrice).toBe(100);
@@ -442,34 +410,118 @@ describe('previewOrder', () => {
 });
 
 describe('maxMarginForBalance', () => {
-    it('inverts the fee model inside the balance', () => {
-        const market = loadedMarket({}, {}, unit(100_000));
-        const max = maxMarginForBalance(market, true, unit(100), 5, px(100));
-        expect(max).toBeGreaterThan(0);
-        expect(max).toBeLessThan(100);
-        // Spending the reported max plus fees must fit inside the balance.
-        const intent = new OrderIntent(market, USER, true);
-        const notional = BigInt(Math.round(max * 5 * 10 ** TOKEN_DECIMALS));
-        const margin = BigInt(Math.round(max * 10 ** TOKEN_DECIMALS));
-        const preview = previewOrder(
-            market,
-            new MarketPosition(true, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []),
-            intent.openMarket({ notional, margin }),
-            px(100),
-            1n,
+    // The exact engine: the position and fees a fill of `order` leaves.
+    const fill = (market: Market, isLong: boolean, notional: bigint, margin: bigint) => {
+        const order = new OrderIntent(market, USER, isLong).openMarket({ notional, margin });
+        const applied = applyOrder(
+            marketContext(market, MarketPosition.zero(isLong), px(100), 1n, USER),
+            order,
+            { executionFee: market.config.execFee },
         );
+        return { order, applied };
+    };
+    /** What the contract escrows for an increase: `Order::escrow_amount`. */
+    const escrow = (market: Market, margin: bigint) => margin + market.config.execFee;
+    /** The highest leverage the initial-margin floor allows. */
+    const maxLeverage = (market: Market) => Number(SCALAR_18 / market.config.initMargin);
+
+    it('sizes an order that escrows the balance exactly and fills to the reported position margin', () => {
+        const market = loadedMarket({}, {}, unit(100_000));
+        const balance = unit(100);
+        const max = maxMarginForBalance(market, true, balance, 5, px(100));
+        expect(max.orderMargin).toBe(balance - market.config.execFee);
+        expect(max.positionMargin).toBeGreaterThan(0n);
+        expect(max.positionMargin).toBeLessThan(max.orderMargin);
+
+        const { order, applied } = fill(market, true, max.notional, max.orderMargin);
+        // The wallet pays the whole balance, to the unit.
+        expect(escrow(market, order.margin)).toBe(balance);
+        if (applied.kind !== 'fills') throw new Error(`expected a fill, got ${applied.kind}`);
+        // The position holds exactly the reported margin: order margin less the fees.
+        expect(applied.outcome.postPosition.margin).toBe(max.positionMargin);
+        expect(applied.outcome.fees.base + applied.outcome.fees.impact).toBe(
+            max.orderMargin - max.positionMargin,
+        );
+        expect(applied.outcome.postPosition.notional).toBe(max.notional);
+        // At or under the chosen leverage, in exact integers.
+        expect(max.notional).toBeLessThanOrEqual(max.positionMargin * 5n);
+
+        // And it is the largest such size: five more units of notional open
+        // above the leverage.
+        const more = fill(market, true, max.notional + 5n, max.orderMargin).applied;
+        if (more.kind !== 'fills') throw new Error(`expected a fill, got ${more.kind}`);
+        expect(max.notional + 5n).toBeGreaterThan(more.outcome.postPosition.margin * 5n);
+
+        // The float preview agrees.
+        const preview = previewOrder(market, MarketPosition.zero(true), order, px(100), 1n);
         expect(preview.outcome).toBe('fills');
-        expect(
-            margin +
-                BigInt(Math.round(preview.baseFee * 10 ** TOKEN_DECIMALS)) +
-                BigInt(Math.round(preview.impactFee * 10 ** TOKEN_DECIMALS)) +
-                market.config.execFee,
-        ).toBeLessThanOrEqual(unit(100));
+        expect(preview.escrowed).toBe(formatToken(balance, TOKEN_DECIMALS));
+        expect(preview.position!.margin).toBe(formatToken(max.positionMargin, TOKEN_DECIMALS));
     });
 
-    it('returns zero when the balance cannot cover the execution fee', () => {
+    it.each([true, false])(
+        'at the maximum leverage the order passes the margin gate (isLong %s)',
+        (isLong) => {
+            const market = loadedMarket({}, {}, unit(100_000));
+            const balance = unit(100);
+            const leverage = maxLeverage(market);
+            const max = maxMarginForBalance(market, isLong, balance, leverage, px(100));
+
+            const { order, applied } = fill(market, isLong, max.notional, max.orderMargin);
+            expect(escrow(market, order.margin)).toBe(balance);
+            if (applied.kind !== 'fills') throw new Error(`expected a fill, got ${applied.kind}`);
+            expect(applied.outcome.postPosition.margin).toBe(max.positionMargin);
+            // The initial-margin floor, as the contract measures it: ceil(initMargin * notional).
+            const required = (max.notional * market.config.initMargin + SCALAR_18 - 1n) / SCALAR_18;
+            expect(max.positionMargin).toBeGreaterThanOrEqual(required);
+            // It sits on the floor: the full leverage is used, to within the rounding of one fee step.
+            expect(max.positionMargin - required).toBeLessThan(10n);
+
+            // The position margin is not the order margin: passed as one, the
+            // fill debits the fees from it again and fails the gate.
+            const naive = fill(market, isLong, max.notional, max.positionMargin).applied;
+            if (naive.kind !== 'gate') throw new Error(`expected a gate, got ${naive.kind}`);
+            expect(naive.code).toBe(713);
+        },
+    );
+
+    it('caps a leverage above the market maximum at the initial-margin floor', () => {
+        const market = loadedMarket({}, {}, unit(100_000));
+        const balance = unit(100);
+        const atMaximum = maxMarginForBalance(market, true, balance, maxLeverage(market), px(100));
+        const beyond = maxMarginForBalance(market, true, balance, maxLeverage(market) * 5, px(100));
+        expect(beyond).toEqual(atMaximum);
+        expect(fill(market, true, beyond.notional, beyond.orderMargin).applied.kind).toBe('fills');
+    });
+
+    it('holds across balances, leverages and sides, on a market with a skewed book', () => {
+        const market = marketWithBook();
+        for (const isLong of [true, false]) {
+            for (const balance of [unit(3), unit(100) + 1n, unit(2_500) + 7_777_777n]) {
+                for (const leverage of [1, 2.5, 7.3333, maxLeverage(market)]) {
+                    const label = `isLong ${isLong}, balance ${balance}, leverage ${leverage}`;
+                    const max = maxMarginForBalance(market, isLong, balance, leverage, px(100));
+                    const { order, applied } = fill(market, isLong, max.notional, max.orderMargin);
+                    expect(escrow(market, order.margin), label).toBe(balance);
+                    expect(applied.kind, label).toBe('fills');
+                    if (applied.kind !== 'fills') continue;
+                    expect(applied.outcome.postPosition.margin, label).toBe(max.positionMargin);
+                    const scaled = BigInt(Math.round(leverage * 10_000));
+                    expect(max.notional * 10_000n, label).toBeLessThanOrEqual(
+                        max.positionMargin * scaled,
+                    );
+                }
+            }
+        }
+    });
+
+    it('returns zeros when the balance affords no position', () => {
         const market = loadedMarket();
-        expect(maxMarginForBalance(market, true, 0n, 5, px(100))).toBe(0);
+        const none = { orderMargin: 0n, notional: 0n, positionMargin: 0n };
+        expect(maxMarginForBalance(market, true, 0n, 5, px(100))).toEqual(none);
+        expect(maxMarginForBalance(market, true, market.config.execFee, 5, px(100))).toEqual(none);
+        expect(maxMarginForBalance(market, true, unit(100), 0, px(100))).toEqual(none);
+        expect(maxMarginForBalance(market, true, unit(100), Number.NaN, px(100))).toEqual(none);
     });
 });
 
@@ -512,12 +564,20 @@ describe('VaultOrderIntent', () => {
         // empty book: 998_000_000 * 10^6 shares.
         const amount = unit(100);
         const expected = new VaultOrderIntent(
-            MARKET, USER, VaultOrderKind.Deposit, amount, 0n,
+            MARKET,
+            USER,
+            VaultOrderKind.Deposit,
+            amount,
+            0n,
         ).expectedOut(market, px(10), 1_000n);
         expect(expected).toBe(998_000_000_000_000n);
 
         const atBound = new VaultOrderIntent(
-            MARKET, USER, VaultOrderKind.Deposit, amount, expected,
+            MARKET,
+            USER,
+            VaultOrderKind.Deposit,
+            amount,
+            expected,
         );
         expect(atBound.fills(market, px(10), 1_000n)).toEqual({ fills: true });
 
@@ -525,9 +585,7 @@ describe('VaultOrderIntent', () => {
         // fill rejects the order rather than leaving it to rest.
         const preFee = market.assetsToShares(amount, px(10));
         expect(preFee).toBe(1_000_000_000_000_000n);
-        const tooTight = new VaultOrderIntent(
-            MARKET, USER, VaultOrderKind.Deposit, amount, preFee,
-        );
+        const tooTight = new VaultOrderIntent(MARKET, USER, VaultOrderKind.Deposit, amount, preFee);
         expect(tooTight.fills(market, px(10), 1_000n)).toEqual({
             fills: false,
             rejected: { quoted: expected },
@@ -538,16 +596,22 @@ describe('VaultOrderIntent', () => {
         // 100 shares redeem 100 gross, 99.75 after the 0.25% fee.
         const shares = unit(100) * SHARE_SCALE;
         const expected = new VaultOrderIntent(
-            MARKET, USER, VaultOrderKind.Redeem, shares, 0n,
+            MARKET,
+            USER,
+            VaultOrderKind.Redeem,
+            shares,
+            0n,
         ).expectedOut(market, px(10), 1_000n);
         expect(expected).toBe(997_500_000n);
 
-        const atBound = new VaultOrderIntent(
-            MARKET, USER, VaultOrderKind.Redeem, shares, expected,
-        );
+        const atBound = new VaultOrderIntent(MARKET, USER, VaultOrderKind.Redeem, shares, expected);
         expect(atBound.fills(market, px(10), 1_000n)).toEqual({ fills: true });
         const above = new VaultOrderIntent(
-            MARKET, USER, VaultOrderKind.Redeem, shares, expected + 1n,
+            MARKET,
+            USER,
+            VaultOrderKind.Redeem,
+            shares,
+            expected + 1n,
         );
         expect(above.fills(market, px(10), 1_000n)).toEqual({
             fills: false,

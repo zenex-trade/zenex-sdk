@@ -49,7 +49,11 @@ describe('OracleContract', () => {
         };
         const op = OracleContract.deploy(OWNER, Buffer.alloc(32, 9), args, undefined, 'hex');
         const decoded = xdr.Operation.fromXDR(op, 'base64');
-        const createContract = decoded.body().invokeHostFunctionOp().hostFunction().createContractV2();
+        const createContract = decoded
+            .body()
+            .invokeHostFunctionOp()
+            .hostFunction()
+            .createContractV2();
         const ctorArgs = createContract.constructorArgs();
         const native = ctorArgs.map((a) => scValToNative(a));
         // Order matters: the two u64 windows are adjacent and indistinguishable
@@ -117,10 +121,15 @@ describe('OracleContract', () => {
         expect(names).not.toContain('update_max_confidence_bps');
 
         const structEntry = spec.entries.find(
-            (e) => e.switch().name === 'scSpecEntryUdtStructV0' && e.udtStructV0().name().toString() === 'PriceData',
+            (e) =>
+                e.switch().name === 'scSpecEntryUdtStructV0' &&
+                e.udtStructV0().name().toString() === 'PriceData',
         );
         expect(structEntry).toBeDefined();
-        const fields = structEntry!.udtStructV0().fields().map((f) => f.name().toString());
+        const fields = structEntry!
+            .udtStructV0()
+            .fields()
+            .map((f) => f.name().toString());
         expect(fields).toEqual(['ask', 'bid', 'publish_time']);
     });
 
