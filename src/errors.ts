@@ -804,16 +804,15 @@ export class ZenexError extends Error {
  *   Without it a code in that range resolves to an `ambiguous` error whose
  *   `codeName` and message state both meanings. Ignored outside 2-13, where
  *   every code has one meaning. `parseError` finds the source in a failed
- *   simulation's events, and `inferErrorSource` (a root export) in an event
- *   log text.
+ *   simulation's events, and `inferErrorSource` in an event log text.
  * @returns The error for the code, or `UnknownError` for a code no contract
- *   defines.
+ *   defines, with the number in its message.
  */
 export function zenexErrorFromCode(code: number, source?: ZenexErrorSource): ZenexError {
     if (code in ZenexErrorCode) {
         return new ZenexError(code as ZenexErrorCode, undefined, source);
     }
-    return new ZenexError(ZenexErrorCode.UnknownError);
+    return new ZenexError(ZenexErrorCode.UnknownError, `Unknown contract error ${code}`);
 }
 
 // Soroban contract error codes are u32; anything larger is not a real code.
@@ -887,3 +886,7 @@ export function parseContractErrorCode(rpcError: string): number | undefined {
         .find((line) => line.includes(ACCOUNT_AUTH_FAILURE));
     return authEvent === undefined ? undefined : contractCode(authEvent);
 }
+
+// `inferErrorSource` reads the same text. Its module imports nothing but
+// this one, so the `./errors` subpath stays free of the Stellar SDK.
+export { inferErrorSource } from './error_source.js';

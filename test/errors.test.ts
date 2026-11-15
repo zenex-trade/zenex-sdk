@@ -436,6 +436,10 @@ describe('zenexErrorFromCode (resolution without a hint)', () => {
 
     it('falls back to UnknownError for codes in no namespace', () => {
         expect(zenexErrorFromCode(999).code).toBe(ZenexErrorCode.UnknownError);
+        // The unknown error keeps the number it could not decode.
+        expect(zenexErrorFromCode(99999).code).toBe(ZenexErrorCode.UnknownError);
+        expect(zenexErrorFromCode(99999).message).toBe('Unknown contract error 99999');
+        expect(zenexErrorFromCode(707).message).toBe('Unknown contract error 707');
         expect(zenexErrorFromCode(0).code).toBe(ZenexErrorCode.UnknownError);
         expect(zenexErrorFromCode(707).code).toBe(ZenexErrorCode.UnknownError);
     });
@@ -744,5 +748,17 @@ describe('package exports', () => {
     it('keeps errors.ts import-free so the subpath stays lean', () => {
         const source = readFileSync(new URL('../src/errors.ts', import.meta.url), 'utf8');
         expect(source).not.toMatch(/^\s*import /m);
+        // Its one re-export is the event-log reader, which imports only
+        // errors.ts back (export_lists.test.ts holds both to that).
+        expect(source.match(/^\s*export [^;]*? from /gm)).toEqual([
+            'export { inferErrorSource } from ',
+        ]);
+    });
+
+    it('exports inferErrorSource from the subpath, the same function as the root', async () => {
+        const subpath = await import('../src/errors.js');
+        const source = await import('../src/error_source.js');
+        expect(subpath.inferErrorSource).toBe(source.inferErrorSource);
+        expect(subpath.inferErrorSource('HostError: Error(Contract, #9)')).toBeUndefined();
     });
 });
