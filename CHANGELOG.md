@@ -2,19 +2,16 @@
 
 ## 1.0.0
 
-The first release of `@zenex-trade/zenex-sdk`. It continues
-`@zenith-protocols/zenex-sdk` 3.0.0, which was installed from git and never
-published to npm. The code is the same; only the package name and the
-version change.
+The initial release of `@zenex-trade/zenex-sdk`: contract bindings,
+ledger-state loaders and exact quotes for the Zenex perpetuals DEX on Stellar.
 
 ### Contracts
 
 - Core contracts (market, strategy vault, factory, oracle, treasury,
-  governance) at the source of
-  [zenex-contracts](https://github.com/zenex-trade/zenex-contracts) v1.0.0,
-  which includes the borrowing NAV change. The committed specs are generated
-  from a build of that source.
-- Market router and fee forwarder from zenex-util-contracts v0.0.2.
+  governance):
+  [zenex-contracts](https://github.com/zenex-trade/zenex-contracts) v1.0.0.
+  The committed specs are generated from its release assets.
+- Market router and fee forwarder: the Zenex utility contracts v0.0.2.
 
 ### Requirements
 
@@ -22,10 +19,70 @@ version change.
   API the SDK calls.
 - Node 22 or later.
 
-### Changes for consumers of `@zenith-protocols/zenex-sdk` from git
+### Stability
 
-These are the changes since the code that `github:zenith-protocols/zenex-sdk-js#main`
-resolved to before October 2026.
+Semver covers the root export and the `./errors` subpath.
+
+---
+
+## Migrating from `@zenith-protocols/zenex-sdk`
+
+This section is for users of the package's predecessor,
+`@zenith-protocols/zenex-sdk`, which was installed from git and never
+published to npm. It is not part of the release history above. Change the
+dependency to `@zenex-trade/zenex-sdk@^1.0.0`, then apply the changes below.
+
+### From 3.0.0
+
+**Breaking**
+
+- `new Market(...)` takes one `MarketFields` object instead of 21 positional
+  arguments, and no longer takes a `network`. Every field is readonly: derive
+  a changed copy with `new Market({ ...market, status })`. `treasuryRate` is
+  required; it defaulted to `0n`.
+- `Market.loadUser(userId)` is removed. Use
+  `MarketUser.load(network, market.id, userId)`.
+- `Market.withData` and `Market.vaultAtomic` are internal and no longer in
+  the type declarations.
+- `OrderIntent`'s `ttlLedgers` applies to market orders only. Trigger orders
+  (`openLimit`, `openStop`, `takeProfit`, `stopLoss`) take their lifetime
+  from the new sixth constructor argument, `triggerTtlLedgers`, 518,400
+  ledgers (about 30 days) by default. They used to expire after `ttlLedgers`,
+  60 by default.
+- A contract error code in 2-13 without a source hint resolves to an
+  ambiguous `ZenexError` that states both meanings (token and price
+  verifier). It used to carry the token meaning. `error.code` is unchanged.
+  Pass `'token'` or `'verifier'` to `zenexErrorFromCode`, `parseError` or
+  `simulateAndParse` (`errorSource`) to choose one.
+- `parseContractErrorCode` and `parseError` read the host error that ended a
+  simulation. A contract error that appears only in the event log is
+  reported only behind a leading `Error(Auth, ...)`. They used to return the
+  first `Error(Contract, #N)` anywhere in the text.
+- `zenexErrorFromGate` is no longer exported from `./errors`.
+- `ZenexError.code` is readonly, and `ZenexError.name` is `'ZenexError'`
+  (it was `'Error'`).
+- `parseMarketInstance`, `parseVaultInstance` and `instanceStorage` throw
+  `MarketStateError` (`MISSING_STATE`) instead of a plain `Error`. The
+  messages are unchanged.
+- `MarketStateFailureCode` no longer includes `'INVALID_INPUT'`, which
+  nothing threw.
+
+**Added**
+
+- Price verifier error codes: `VerifierErrorCode` (2-18), the
+  `ZenexErrorCode` members `VerifierIncorrectSignatureCount` (14) to
+  `VerifierInvalidProposedOwner` (18), the `ZenexErrorSource` type, and
+  `ZenexError.source`, `ambiguous` and `codeName`.
+- `MarketFields`, `MarketPosition.zero(isLong)`,
+  `DEFAULT_ORDER_TTL_LEDGERS` and `DEFAULT_TRIGGER_ORDER_TTL_LEDGERS`.
+
+**Changed**
+
+- `toFixed` is no longer deprecated. Its rounding is documented.
+- `maxMarginForBalance` is documented as what it returns: the position
+  margin after the opening fees, not the order's `margin` argument.
+
+### From the git `main` branch before October 2026
 
 **Breaking**
 
