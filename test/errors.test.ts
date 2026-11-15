@@ -270,7 +270,8 @@ describe('util-contract and smart-account codes', () => {
     it('a session-policy refusal decodes from the simulation diagnostics', () => {
         const diagnostic = 'HostError: Error(Auth, InvalidAction)\n'
             + 'Event log (newest first):\n'
-            + '   0: [Diagnostic Event] topics:[error, Error(Contract, #4006)]';
+            + '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #4006)]\n'
+            + '   1: [Diagnostic Event] contract:CPOLICY, topics:[error, Error(Contract, #4006)], data:"escalating error to panic"';
         const code = parseContractErrorCode(diagnostic);
         expect(code).toBe(4006);
         expect(zenexErrorFromCode(code!).code).toBe(ZenexErrorCode.SessionForwardNotAllowed);
@@ -612,6 +613,25 @@ describe('parseContractErrorCode (strict Error(Contract, #N) shape)', () => {
         const raw = 'HostError: Error(Auth, InvalidAction)' + LOG
             + '   0: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]\n'
             + '   1: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #3003)]';
+        expect(parseContractErrorCode(raw)).toBe(3003);
+    });
+
+    it('a leading auth error never takes a contract error the invocation survived', () => {
+        // No account-authentication event: the 741 was caught by a try_call
+        // and is not what failed the authentication.
+        const raw = 'HostError: Error(Auth, InvalidAction)' + LOG
+            + '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:"Unauthorized function call for address"\n'
+            + '   1: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]';
+        expect(parseContractErrorCode(raw)).toBeUndefined();
+    });
+
+    it('the account-authentication event keeps its precedence when the newlines were escaped', () => {
+        const raw = JSON.stringify({
+            error: 'HostError: Error(Auth, InvalidAction)' + LOG
+                + '   0: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]\n'
+                + '   1: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #3003)]',
+        });
+        expect(raw).not.toContain('\n');
         expect(parseContractErrorCode(raw)).toBe(3003);
     });
 

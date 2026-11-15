@@ -832,11 +832,15 @@ const CONTRACT_ERROR_PATTERN = /Error\(Contract, #(\d{1,10})\)/;
 // Any host error, such as `Error(Budget, ExceededLimit)`.
 const ANY_HOST_ERROR_PATTERN = /Error\((\w+), [^)]*\)/;
 // The diagnostic section of a simulation error: `Event log (newest first):`.
-// Matched anywhere, so text whose newlines were escaped still splits.
-const EVENT_LOG_PATTERN = /\bEvent log\b/;
+// Matched anywhere and with no word boundary in front, so text whose newlines
+// were escaped (`...\nEvent log`, an `n` right before the `E`) still splits.
+const EVENT_LOG_PATTERN = /Event log\b/;
 // The host's diagnostic for an account contract whose `__check_auth` failed.
 // The event carries the account's own error after this text.
 const ACCOUNT_AUTH_FAILURE = 'failed account authentication';
+// The break between two events of the log: a line break, or its escaped form
+// in text that was JSON-stringified.
+const EVENT_SEPARATOR_PATTERN = /\r?\n|(?:\\r)?\\n/;
 
 function contractCode(text: string): number | undefined {
     const match = CONTRACT_ERROR_PATTERN.exec(text);
@@ -860,9 +864,10 @@ function contractCode(text: string): number | undefined {
  * 2. A leading `Error(Auth, ...)` falls back to the event log. The host
  *    reports an account contract's failed `__check_auth` as
  *    `Error(Auth, InvalidAction)` and keeps the account's own code (a smart
- *    account or session policy reject) only in the log. The code on the
- *    `failed account authentication` event wins, else the newest contract
- *    error in the log.
+ *    account or session policy reject) only in the log, on the
+ *    `failed account authentication` event. That event's code is returned.
+ *    Without the event there is no code: any other contract error in the
+ *    log is one the invocation survived.
  * 3. Any other leading host error (`Budget`, `Storage`, `WasmVm`, ...) is
  *    not a contract failure: `undefined`, whatever the log holds.
  * 4. Text with no leading host error, such as a single diagnostic line, is
@@ -878,12 +883,11 @@ export function parseContractErrorCode(rpcError: string): number | undefined {
     if (leading[1] === 'Contract') return contractCode(leading[0]);
     if (leading[1] !== 'Auth' || log === null) return undefined;
 
-    const diagnostics = rpcError.slice(log.index);
-    const authEvent = diagnostics
-        .split('\n')
+    // One event per line. Text that went through a JSON dump carries its
+    // line breaks escaped, so those split the events too.
+    const authEvent = rpcError
+        .slice(log.index)
+        .split(EVENT_SEPARATOR_PATTERN)
         .find((line) => line.includes(ACCOUNT_AUTH_FAILURE));
-    return (
-        (authEvent === undefined ? undefined : contractCode(authEvent))
-        ?? contractCode(diagnostics)
-    );
+    return authEvent === undefined ? undefined : contractCode(authEvent);
 }
