@@ -484,12 +484,35 @@ export function previewOrder(
 const LEVERAGE_SCALE = 10_000n;
 
 /**
- * Largest margin a wallet balance affords at a chosen leverage: solves
- * `balance = margin + tradeFee(margin * leverage) + execFee` against the
- * fee model (base fee at the side's rate plus the size-quadratic impact
- * fee). The order ticket's "Max" button. Token units, floor-rounded so the
- * value round-trips through an input field and `parseAtomic` without
- * exceeding the true maximum. `0` when the balance cannot cover the fees.
+ * Largest position margin a wallet balance affords at a chosen leverage,
+ * AFTER the opening fees: the margin the position holds once the fill has
+ * debited them. The order ticket's "Max" button.
+ *
+ * This is not the order's `margin` argument. On chain an increase escrows
+ * `margin + execFee` from the wallet, and the fill then takes the base and
+ * impact fees out of that margin, so the position keeps `margin - fees`.
+ * The result solves `balance = positionMargin + tradeFee(positionMargin *
+ * leverage) + execFee` against the fee model (base fee at the side's rate
+ * plus the size-quadratic impact fee).
+ *
+ * To spend the whole balance at the leverage, size the order from the
+ * result and pass the fees along in the escrow:
+ *
+ * - `notional = result * leverage`
+ * - `margin = balance - market.config.execFee`
+ *
+ * Passing the result itself as `margin` leaves the fees unspent in the
+ * wallet and opens above the chosen leverage, since the fill debits them
+ * from the smaller margin. At the market's maximum leverage that fill fails
+ * the initial-margin gate (`InsufficientMargin`, 713).
+ *
+ * The fees are those of an open on a flat side at this snapshot. An
+ * increase of an existing position also settles its pending funding and
+ * borrowing out of the margin, which this does not count.
+ *
+ * @returns Token units, floor-rounded so the value round-trips through an
+ *   input field and `parseAtomic` without exceeding the true maximum. `0`
+ *   when the balance cannot cover the fees.
  */
 export function maxMarginForBalance(
     market: Market,
