@@ -680,6 +680,18 @@ describe('package exports', () => {
         });
     });
 
+    it('keeps the quote-gate helper out of the public subpath', () => {
+        const source = readFileSync(new URL('../src/errors.ts', import.meta.url), 'utf8');
+        expect(source).not.toContain('zenexErrorFromGate');
+    });
+
+    it('strips @internal members from the published declarations', () => {
+        const tsconfig = JSON.parse(
+            readFileSync(new URL('../tsconfig.json', import.meta.url), 'utf8')
+        ) as { compilerOptions: { stripInternal?: boolean } };
+        expect(tsconfig.compilerOptions.stripInternal).toBe(true);
+    });
+
     it('keeps errors.ts import-free so the subpath stays lean', () => {
         const source = readFileSync(new URL('../src/errors.ts', import.meta.url), 'utf8');
         expect(source).not.toMatch(/^\s*import /m);
