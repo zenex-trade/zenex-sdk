@@ -464,8 +464,10 @@ describe('Market constructor (one fields object)', () => {
 
     it('declares its fields readonly', () => {
         const market = new Market(fields);
-        // @ts-expect-error fields are readonly: build a new snapshot instead.
-        const assign = () => { market.status = Status.Frozen; };
+        const assign = () => {
+            // @ts-expect-error fields are readonly: build a new snapshot instead.
+            market.status = Status.Frozen;
+        };
         expect(assign).toBeTypeOf('function');
     });
 
