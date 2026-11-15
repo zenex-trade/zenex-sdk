@@ -521,6 +521,9 @@ export interface MaxMarginForBalance {
     readonly positionMargin: bigint;
 }
 
+/** Upper bound on the leverage argument before scaling: above every leverage a market allows. */
+const MAX_LEVERAGE_INPUT = 1_000_000;
+
 /**
  * The largest open a wallet balance affords at a chosen leverage, spending
  * the whole balance. The order ticket's "Max" button.
@@ -584,7 +587,12 @@ export function maxMarginForBalance(
     const priceData = marketPrice(market, price, quoteTime(market));
     const entry = isLong ? priceData.ask : priceData.bid;
     if (entry <= 0n) return none;
-    const leverageScaled = BigInt(Math.round(leverage * Number(LEVERAGE_SCALE)));
+    // The initial-margin floor caps the leverage far below this bound (the
+    // contract's smallest initial margin is 0.1%, 1000x), so the clamp only
+    // keeps a huge finite input from overflowing to Infinity when scaled.
+    const leverageScaled = BigInt(
+        Math.round(Math.min(leverage, MAX_LEVERAGE_INPUT) * Number(LEVERAGE_SCALE)),
+    );
     const initMargin = market.config.initMargin;
     const budget = balance - market.config.execFee;
 

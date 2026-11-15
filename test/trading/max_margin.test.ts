@@ -285,4 +285,11 @@ describe('maxMarginForBalance: a leverage that is no leverage', () => {
         expect(capped).toEqual(maxMarginForBalance(book, true, 10n ** 9n, 10, px(100)));
         expect(capped.notional).toBeGreaterThan(0n);
     });
+
+    it('caps a leverage too large to scale, up to the largest finite number', () => {
+        const atMax = maxMarginForBalance(book, true, 10n ** 9n, 10, px(100));
+        for (const leverage of [1e308, Number.MAX_VALUE]) {
+            expect(maxMarginForBalance(book, true, 10n ** 9n, leverage, px(100))).toEqual(atMax);
+        }
+    });
 });
