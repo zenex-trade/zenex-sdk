@@ -4,7 +4,6 @@ import { parseVaultInstance } from '../../src/contracts/vault/instance.js';
 import { MarketStateError } from '../../src/entries.js';
 import {
     vaultInstanceScVal,
-    balanceMapScVal,
     contractInstance,
     unitKey,
 } from '../helpers/market_state.js';

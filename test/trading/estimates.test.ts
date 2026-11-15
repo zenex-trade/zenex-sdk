@@ -46,7 +46,6 @@ const TOKEN = StrKey.encodeContract(Buffer.alloc(32, 3));
 const ORACLE = StrKey.encodeContract(Buffer.alloc(32, 4));
 const TREASURY = StrKey.encodeContract(Buffer.alloc(32, 5));
 const USER = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 6));
-const NETWORK = { rpc: 'http://localhost', passphrase: 'test' };
 
 function marketData(overrides: Partial<MarketData> = {}): MarketData {
     return {

@@ -29,7 +29,6 @@ import { OrderIntent, previewOrder } from '../../src/trading/order.js';
 import { MarketPosition } from '../../src/trading/position.js';
 
 const MARKET = StrKey.encodeContract(Buffer.alloc(32, 1));
-const MARKET_B = StrKey.encodeContract(Buffer.alloc(32, 9));
 const VAULT = StrKey.encodeContract(Buffer.alloc(32, 2));
 const VAULT_B = StrKey.encodeContract(Buffer.alloc(32, 10));
 const TOKEN = StrKey.encodeContract(Buffer.alloc(32, 3));
@@ -45,7 +44,6 @@ const network: Network = {
 };
 
 const contracts: MarketContracts = { market: MARKET, vault: VAULT, token: TOKEN };
-const contractsB: MarketContracts = { market: MARKET_B, vault: VAULT_B, token: TOKEN };
 
 function marketEntries(
     where: MarketContracts,

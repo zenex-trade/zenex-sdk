@@ -32,13 +32,11 @@ import {
 import { linkedEntries } from './market_fixture.js';
 
 const MARKET = StrKey.encodeContract(Buffer.alloc(32, 1));
-const OTHER_MARKET = StrKey.encodeContract(Buffer.alloc(32, 9));
 const VAULT = StrKey.encodeContract(Buffer.alloc(32, 2));
 const TOKEN = StrKey.encodeContract(Buffer.alloc(32, 3));
 const ORACLE = StrKey.encodeContract(Buffer.alloc(32, 4));
 const TREASURY = StrKey.encodeContract(Buffer.alloc(32, 5));
 const USER = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 7));
-const USER_B = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 8));
 const RATE = 5n * 10n ** 16n;
 
 const network: Network = {
