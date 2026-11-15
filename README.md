@@ -74,8 +74,12 @@ you passed disagrees with the market's own wiring.
 A `Market` is an immutable snapshot with readonly fields, and it holds no
 network. To build one by hand, for a test or from indexed state, pass its
 fields as one object: `new Market({ id, ledger, config, data, treasuryRate,
-... })`. `treasuryRate` is required, because a rate of 0 overstates a redeem
-quote. Derive a changed copy by spreading: `new Market({ ...market, status })`.
+spreadReductionFactor, ... })`. Neither `treasuryRate` nor
+`spreadReductionFactor` has a default: a rate of 0 overstates a redeem quote,
+and a factor of 0 prices a report wider than a narrowing oracle fills it.
+Only `owner`, `terminalPrice` and `delistedAt` are optional, and a missing
+required field throws a `TypeError` that names it. Derive a changed copy by
+spreading: `new Market({ ...market, status })`.
 The nested `config`, `data` and `adl` are frozen copies, so a write to one of
 their fields throws, and the objects you passed in stay yours.
 
@@ -92,6 +96,8 @@ or an empty side with `MarketPosition.zero(isLong)`. Like `Market`,
 object, for a test or for state you indexed yourself:
 
 ```ts
+import { MarketPosition, MarketUser } from '@zenex-trade/zenex-sdk';
+
 const position = new MarketPosition({ isLong: true, margin, notional, tokens, ...rest });
 const larger = new MarketPosition({ ...position, margin: position.margin + added });
 const user = new MarketUser({
@@ -99,6 +105,10 @@ const user = new MarketUser({
     orderCounter: 1, claimableCredit: 0n,
 });
 ```
+
+A position's `decreaseOrders` is its own frozen copy of the list. `MarketUser`
+rejects a position on the wrong side (`long` must have `isLong: true`), and
+both constructors name the first required field that is missing.
 
 ## Preview an order
 
@@ -142,8 +152,10 @@ An order's lifetime depends on its kind:
 | Market: `openMarket`, `closePosition`, `decrease`, `addMargin`, `withdrawMargin` | `ttlLedgers` (4th) | 60 ledgers, about 5 minutes |
 | Trigger: `openLimit`, `openStop`, `takeProfit`, `stopLoss` | `triggerTtlLedgers` (6th) | never expires (`NO_EXPIRY_LEDGER`) |
 
-The contract accepts any expiration at or after the current ledger, and an
-order fills through its expiration ledger. An expired order never fills, and
+A lifetime is a whole number of ledgers, zero or more; the constructor throws
+a `RangeError` for anything else. The contract accepts any expiration at or
+after the current ledger, up to the largest `u32` (`NO_EXPIRY_LEDGER`), which
+no lifetime exceeds, and an order fills through its expiration ledger. An expired order never fills, and
 its escrow stays in the market until the order is cancelled.
 
 `maxMarginForBalance` sizes the largest open a wallet balance affords at a
@@ -160,15 +172,28 @@ atomic units:
 import { maxMarginForBalance, formatTokenFloor } from '@zenex-trade/zenex-sdk';
 
 const max = maxMarginForBalance(market, true, balance, 5, price);
-const order = intent.openMarket({ notional: max.notional, margin: max.orderMargin });
+// `intent` carries a slippage bound, so the order needs the price.
+const order = intent.openMarket({ notional: max.notional, margin: max.orderMargin, price });
 formatTokenFloor(max.positionMargin, market.assetDecimals); // the margin to display
 ```
 
-The order escrows exactly `balance` and opens at or under the leverage. A
-leverage above what the market's initial margin allows is capped at that
-maximum, so the order passes the margin gate (713). Do not pass
-`positionMargin` as the order's `margin`: the fill would take the fees out of
-it again.
+The order escrows exactly `balance` and opens at or under the leverage,
+measured as notional over position margin, and one atomic unit more of
+`notional` would not fit. A leverage above what the
+market's initial margin allows is capped at that maximum. A leverage that is
+not a positive finite number returns all zeros, as does a balance that
+affords no position. Do not pass `positionMargin` as the order's `margin`:
+the fill would take the fees out of it again.
+
+The order passes the initial-margin gate (713) under the conditions it was
+sized for: an open on a flat side, filled against the snapshot's book and fee
+side. It can still fail that gate when the book flips the fee side before the
+fill, or when the side already holds a position, whose pending funding and
+borrowing the fill settles out of the margin. The function does not solve for
+the other gates: the position and order minimums, the open-interest and
+utilization caps, and the maintenance gate (723), which a fill fails when the
+fees of closing the new position would leave it under its maintenance margin.
+Preview the order before you sign it.
 
 For amounts, parse what the user typed with `parseAtomic(text, decimals)`,
 which is exact. `toFixed(number, decimals)` converts a number that is already
@@ -434,14 +459,27 @@ not only its `error` text.
 You can also say which one you expect, and a hint overrides the events:
 
 ```ts
-import { inferErrorSource, parseError } from '@zenex-trade/zenex-sdk';
-import { zenexErrorFromCode } from '@zenex-trade/zenex-sdk/errors';
+import { parseError } from '@zenex-trade/zenex-sdk';
+import { inferErrorSource, zenexErrorFromCode } from '@zenex-trade/zenex-sdk/errors';
 
 zenexErrorFromCode(12, 'verifier').codeName; // 'VerifierBadVerification'
 zenexErrorFromCode(12, 'token').codeName; // 'OverflowError'
-parseError(simulation, 'verifier'); // the hint wins
+if (rpc.Api.isSimulationError(simulation)) {
+    parseError(simulation, 'verifier'); // the hint wins
+}
 inferErrorSource(text); // from a text that includes the host's event log, as the CLI prints
 ```
+
+`inferErrorSource` is exported from the root and from `./errors`, which loads
+without the Stellar SDK.
+
+**Account contract codes.** When an account contract rejects an
+authorization, the simulation ends with `Error(Auth, InvalidAction)` and the
+account's own code sits on a diagnostic event. `parseError` reads it from the
+response's events and decodes a smart-account (3000-3016) or session-policy
+(4002-4007) code. Another account numbers its errors as it likes, so any
+other number there comes back as `UnknownError` with the number in its
+message, never as the market or verifier error of the same number.
 
 `ZenexError` and `MarketStateError` are each defined once per build, so
 `instanceof` does not hold across the ESM and CommonJS builds: compare
@@ -516,6 +554,10 @@ npm run architecture:check
 npm run build
 npm run specs:check        # needs the release WASMs, see below
 ```
+
+`npm publish` runs `prepublishOnly` first: `typecheck`, `lint`,
+`format:check`, `test` and `architecture:check`. `specs:check` is not part of
+it, because it reads files outside the repository.
 
 `specs:check` compares the committed contract specs with the release WASMs,
 and `specs:generate` rewrites them. Both read two directories:
