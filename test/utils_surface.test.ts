@@ -13,7 +13,7 @@ import {
     contractInstanceLedgerKey,
 } from '../src/contracts/keys.js';
 import { tokenBalanceLedgerKey } from '../src/token.js';
-import { toFixed, toFloat, mulDivFloor, mulDivCeil, SCALAR_18 } from '../src/math/index.js';
+import { parseAtomic, toFixed, toFloat, mulDivFloor, mulDivCeil, SCALAR_18 } from '../src/math/index.js';
 import { simulateAndParse } from '../src/simulate.js';
 import { ZenexError, ZenexErrorCode } from '../src/errors.js';
 import { TreasuryContract } from '../src/contracts/treasury/contract.js';
@@ -75,6 +75,30 @@ describe('math extras', () => {
         expect(toFloat(SCALAR_18, 18)).toBe(1);
         expect(toFixed(2, 2)).toBe(200n);
         expect(toFloat(200n, 2)).toBe(2);
+    });
+
+    it('toFixed rounds the double product to the nearest unit, ties toward +infinity', () => {
+        expect(toFixed(0.15, 1)).toBe(2n);
+        expect(toFixed(2.5, 0)).toBe(3n);
+        expect(toFixed(-2.5, 0)).toBe(-2n);
+        expect(toFixed(0.4, 0)).toBe(0n);
+        expect(toFixed(-0.4, 0)).toBe(0n);
+        expect(toFixed(123.4567891, 7)).toBe(1234567891n);
+    });
+
+    it('toFixed is lossy where the float is: the documented cases', () => {
+        // 1.005 has no exact double; the product is 100.49999999999999.
+        expect(toFixed(1.005, 2)).toBe(100n);
+        // The exact parser reads the text instead and never rounds.
+        expect(parseAtomic('1.005', 3)).toBe(1005n);
+        // Past 2^53 atomic units only the nearest double survives.
+        expect(toFixed(0.123456789012345678, 18)).not.toBe(123456789012345678n);
+        expect(parseAtomic('0.123456789012345678', 18)).toBe(123456789012345678n);
+    });
+
+    it('toFixed throws on a non-finite input', () => {
+        expect(() => toFixed(Number.NaN, 7)).toThrow(RangeError);
+        expect(() => toFixed(Number.POSITIVE_INFINITY, 7)).toThrow(RangeError);
     });
 
     it('mulDivFloor and mulDivCeil divide with true floor and ceil', () => {
