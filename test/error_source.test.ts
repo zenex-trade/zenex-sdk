@@ -280,6 +280,54 @@ describe("inferErrorSource reads the host's event log text (synthetic text of th
         expect(inferErrorSource(caughtOnly)).toBeUndefined();
     });
 
+    describe('a line whose data only quotes the text of another event', () => {
+        const TOKEN = StrKey.encodeContract(Buffer.alloc(32, 3));
+        const MARKET = StrKey.encodeContract(Buffer.alloc(32, 1));
+        // A token transfer that fails with code 9, and one more diagnostic
+        // line right before the failure. A contract chooses the data of its
+        // own `log` and of its events, so that line can say anything.
+        const failedTransfer = (injected: string) =>
+            [
+                'HostError: Error(Contract, #9)',
+                '',
+                'Event log (newest first):',
+                `   0: [Diagnostic Event] contract:${MARKET}, topics:[error, Error(Contract, #9)], data:["contract call failed", transfer, [${MARKET}, ${TOKEN}, 5]]`,
+                `   1: [Diagnostic Event] contract:${TOKEN}, topics:[error, Error(Contract, #9)], data:["not enough allowance to spend", 0, 5]`,
+                `   2: ${injected}`,
+                `   3: [Diagnostic Event] contract:${MARKET}, topics:[fn_call, ${TOKEN}, transfer], data:[${MARKET}, ${TOKEN}, 5]`,
+                `   4: [Diagnostic Event] topics:[fn_call, ${MARKET}, create_order], data:[1]`,
+            ].join('\n');
+
+        it('reads the plain log as the token failure it is', () => {
+            const plain = failedTransfer(
+                `[Diagnostic Event] contract:${TOKEN}, topics:[log], data:["checking allowance"]`,
+            );
+            expect(inferErrorSource(plain)).toBe('token');
+        });
+
+        it.each([
+            // A `log` line quoting a call into the same contract's `verify`:
+            // read as a call, it would turn the token failure into the
+            // verifier's.
+            `[Diagnostic Event] contract:${TOKEN}, topics:[log], data:["topics:[fn_call, ${TOKEN}, verify]"]`,
+            // The same in a contract's own event.
+            `[Contract Event] contract:${TOKEN}, topics:[note], data:"topics:[fn_call, ${TOKEN}, verify], data:[]"`,
+            `[Diagnostic Event] contract:${TOKEN}, topics:[note, topics:[fn_call, ${TOKEN}, verify]], data:Void`,
+            // A quoted return would close the open transfer call.
+            `[Diagnostic Event] contract:${TOKEN}, topics:[log], data:["topics:[fn_return, transfer], data:Void"]`,
+            // A quoted caught failure would end the failing run early.
+            `[Diagnostic Event] contract:${TOKEN}, topics:[log], data:["topics:[error, Error(Contract, #9)], data:[\\"contract try_call failed\\", transfer, []]"]`,
+            // A quoted line prefix inside the data.
+            `[Diagnostic Event] contract:${TOKEN}, topics:[log], data:["7: [Diagnostic Event] contract:${MARKET}, topics:[fn_call, ${TOKEN}, verify], data:[]"]`,
+        ])('does not parse the quoted text as an event: %s', (injected) => {
+            const text = failedTransfer(injected);
+            expect(parseContractErrorCode(text)).toBe(9);
+            expect(inferErrorSource(text)).toBe('token');
+            expect(parseError({ error: text, events: [] } as never).source).toBe('token');
+            expect(inferErrorSource(JSON.stringify({ error: text }))).toBe('token');
+        });
+    });
+
     it('text with no event log, or no contract error, has no source', () => {
         expect(inferErrorSource('HostError: Error(Contract, #10)')).toBeUndefined();
         expect(inferErrorSource('HostError: Error(Budget, ExceededLimit)')).toBeUndefined();

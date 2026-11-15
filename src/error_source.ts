@@ -113,17 +113,23 @@ function unwinds(event: CallEvent, code: number): boolean {
 //   0: [Diagnostic Event] contract:C..., topics:[error, Error(Contract, #9)], data:"..."
 //   1: [Diagnostic Event] contract:C..., topics:[fn_call, C..., verify], data:[...]
 // An event of a failed call reads `[Failed Diagnostic Event (not emitted)]`.
+// A value quoted in an event's data can repeat any of this text, so every
+// pattern below is anchored: the event line's own prefix first, then the
+// topics that follow it.
 const EVENT_LOG_PATTERN = /Event log\b/;
 const LINE_BREAK_PATTERN = /\r?\n|(?:\\r)?\\n/;
-const EVENT_LINE_PATTERN = /^\s*\d+: \[(?:Failed )?(\w+) Event(?: \(not emitted\))?\] /;
-const EMITTER_PATTERN = /\] contract:(C[A-Z2-7]{55}), topics:\[/;
-const CALL_PATTERN = /topics:\[fn_call, (C[A-Z2-7]{55}), (\w+)\]/;
-const RETURN_PATTERN = /topics:\[fn_return, \w+\]/;
-const ERROR_PATTERN = /topics:\[error, Error\(Contract, #(\d{1,10})\)\], data:(.*)$/;
+// The line up to its topics: the index, the event type, the emitting
+// contract when there is one, and the opening of the topic list.
+const EVENT_LINE_PATTERN =
+    /^\s*\d+: \[(?:Failed )?(\w+) Event(?: \(not emitted\))?\] (?:contract:(C[A-Z2-7]{55}), )?topics:\[/;
+// The rest of the line, from its first topic.
+const CALL_PATTERN = /^fn_call, (C[A-Z2-7]{55}), (\w+)\]/;
+const RETURN_PATTERN = /^fn_return, \w+\]/;
+const ERROR_PATTERN = /^error, Error\(Contract, #(\d{1,10})\)\], data:(.*)$/;
 // The data of the event a caller logs for a failed call. The quotes are
 // escaped in text that went through a JSON dump.
 const CALL_FAILED_PATTERN = /^\[\\?"contract (try_)?call failed\\?"/;
-const TRAP_PATTERN = /topics:\[log\]/;
+const TRAP_PATTERN = /^log\]/;
 
 /**
  * @internal
@@ -135,35 +141,41 @@ export function callEventsFromLog(rpcError: string): CallEvent[] {
     if (log === null) return [];
     const events: CallEvent[] = [];
     for (const line of rpcError.slice(log.index).split(LINE_BREAK_PATTERN)) {
-        const event = EVENT_LINE_PATTERN.exec(line);
-        if (event !== null) events.push(callEventFromLine(line, event[1]));
+        const prefix = EVENT_LINE_PATTERN.exec(line);
+        if (prefix === null) continue;
+        events.push(callEventFromTopics(line.slice(prefix[0].length), prefix[1], prefix[2]));
     }
     // The log lists the newest event first.
     return events.reverse();
 }
 
-function callEventFromLine(line: string, type: string): CallEvent {
+/**
+ * One event from the text after `topics:[`, the event type and the emitting
+ * contract of its line.
+ */
+function callEventFromTopics(topics: string, type: string, emitter: string | undefined): CallEvent {
     if (type !== 'Diagnostic') return { kind: 'other' };
-    const call = CALL_PATTERN.exec(line);
+    const call = CALL_PATTERN.exec(topics);
     if (call !== null) return { kind: 'call', callee: call[1], fn: call[2] };
-    if (RETURN_PATTERN.test(line)) return { kind: 'return' };
-    const error = ERROR_PATTERN.exec(line);
+    if (RETURN_PATTERN.test(topics)) return { kind: 'return' };
+    const error = ERROR_PATTERN.exec(topics);
     if (error !== null) {
         const code = Number(error[1]);
         const failed = CALL_FAILED_PATTERN.exec(error[2]);
         if (failed !== null) {
             return { kind: 'callFailed', code, caught: failed[1] !== undefined };
         }
-        return { kind: 'error', contract: EMITTER_PATTERN.exec(line)?.[1], code };
+        return { kind: 'error', contract: emitter, code };
     }
-    if (TRAP_PATTERN.test(line)) return { kind: 'trap' };
+    if (TRAP_PATTERN.test(topics)) return { kind: 'trap' };
     return { kind: 'other' };
 }
 
 /**
  * Which contract raised the error that ended an invocation, read from the
  * event log of a raw simulation or diagnostic string: `'token'`,
- * `'verifier'`, or `undefined` when the text does not show it.
+ * `'verifier'`, or `undefined` when the text does not show it. Exported
+ * from the root and from the `./errors` subpath.
  *
  * It answers the question a code in 2-13 leaves open (see
  * `zenexErrorFromCode`), and it answers from the failing call, never from
@@ -171,6 +183,10 @@ function callEventFromLine(line: string, type: string): CallEvent {
  * call it was raised in: the verifier's `verify`, or a token function such
  * as `transfer`. A call that both moves tokens and verifies a price report,
  * such as the router's create-and-fill, is decided the same way.
+ *
+ * Only an event's own line is read: its index, type and emitting contract,
+ * then its topics. Text that a value in an event's data merely quotes, such
+ * as a contract's `log` of a line that looks like a call, is never an event.
  *
  * `undefined` when the text has no event log (the RPC's simulation error
  * string carries none; `parseError` reads the response's events instead),
