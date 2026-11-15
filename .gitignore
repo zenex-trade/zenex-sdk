@@ -25,5 +25,5 @@ coverage/
 .vscode/
 .DS_Store
 
-# Agent-generated documentation lives in ../agent-docs/<repository>/docs/
+# Local documentation drafts
 /docs/

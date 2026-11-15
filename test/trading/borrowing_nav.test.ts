@@ -36,7 +36,8 @@ import {
     pair,
 } from './market_fixture.js';
 
-// Ports of the zenex-contracts #223 tests (branch head 201a2f0): pending
+// Ports of the contract tests for the borrowing NAV change in
+// zenex-contracts v1.0.0: pending
 // borrowing, the LP NAV adjustment, the borrowing checkpoint weight, the
 // deposit PnL gate, and the vault's supply and payout bounds. Inputs and
 // expected values are the contract's, to the unit.

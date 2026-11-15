@@ -1,12 +1,23 @@
-// Validate the SDK against a LIVE stack, read-only.
+// Validate the SDK against a LIVE market, read-only.
 //
-//   npm run build && node scripts/live-check.mjs
+//   npm run build
+//   ZENEX_RPC=https://your-rpc ZENEX_MARKET=C... node scripts/live-check.mjs
 //
-// Loads the deployed xlm-usd market through `Market.load`, cross-checks every
-// loaded field against the contract's own view calls (simulated on the same
-// live wasms the SDK's committed specs were generated from), and runs the
-// estimate tier end to end at a chain-derived price. Reads and simulations
-// only — nothing is signed or submitted.
+// Loads the market through `Market.load`, cross-checks every loaded field
+// against the contract's own view calls (simulated against the deployed
+// contracts), and runs the estimate tier end to end at a chain-derived
+// price. Reads and simulations only: nothing is signed or submitted.
+//
+// Environment:
+//   ZENEX_RPC          required. Stellar RPC URL for the network.
+//   ZENEX_MARKET       required. The market contract id.
+//   ZENEX_PASSPHRASE   network passphrase. Defaults to mainnet
+//                      ('Public Global Stellar Network ; September 2015');
+//                      testnet is 'Test SDF Network ; September 2015'.
+//   ZENEX_VAULT        vault and token, to check them against the market's
+//   ZENEX_TOKEN        own wiring. Default: read from the market instance.
+//   ZENEX_PROBE_USER   an account with no state on the market, for the
+//                      empty-user checks.
 
 import {
     Market,
@@ -23,16 +34,23 @@ import {
 } from '../dist/esm/index.js';
 import { rpc } from '@stellar/stellar-sdk';
 
-// Defaults target the mainnet xlm-usd market (contracts release 644a4c4)
-// through the homelab mainnet RPC. Override with env vars to point elsewhere,
-// such as a testnet stack (passphrase 'Test SDF Network ; September 2015'):
-//   ZENEX_RPC, ZENEX_PASSPHRASE, ZENEX_MARKET, ZENEX_VAULT, ZENEX_TOKEN,
-//   ZENEX_PROBE_USER
+function required(name) {
+    const value = process.env[name];
+    if (!value) {
+        console.error(`${name} is not set. See the header of scripts/live-check.mjs.`);
+        process.exit(2);
+    }
+    return value;
+}
+
+const RPC_URL = required('ZENEX_RPC');
+const MARKET_ID = required('ZENEX_MARKET');
 const NETWORK = {
-    rpc: process.env.ZENEX_RPC ?? 'http://192.168.2.150:8000',
+    rpc: RPC_URL,
     passphrase:
         process.env.ZENEX_PASSPHRASE ?? 'Public Global Stellar Network ; September 2015',
-    opts: { allowHttp: true },
+    // Plain HTTP only when the URL asks for it, such as a local node.
+    opts: { allowHttp: RPC_URL.startsWith('http://') },
 };
 
 let failures = 0;
@@ -45,12 +63,16 @@ function fmt(value) {
     return typeof value === 'bigint' ? value.toString() : JSON.stringify(value);
 }
 
+// The market instance names its own vault, token, oracle and treasury. An
+// address given in the environment replaces the resolved one, so the load's
+// identity check compares it with the market's wiring.
+const resolved = await Market.resolveContracts(NETWORK, MARKET_ID);
 const contracts = {
-    market: process.env.ZENEX_MARKET ?? 'CAOZCITWHWAXH5FRU4EULQ5EN2HMTCHICRNC4R5ZAOVD7XHCCQSJ42IB',
-    vault: process.env.ZENEX_VAULT ?? 'CB2MX4WXJHOHCTDTN5DCFC7G3TLFLOYLCRCINPK7G2A3EUVW2AYVA56N',
-    token: process.env.ZENEX_TOKEN ?? 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75',
+    ...resolved,
+    vault: process.env.ZENEX_VAULT ?? resolved.vault,
+    token: process.env.ZENEX_TOKEN ?? resolved.token,
 };
-console.log(`\nLive market xlm-usd via ${NETWORK.rpc}`);
+console.log(`\nLive market via ${NETWORK.rpc}`);
 console.log(`  market  ${contracts.market}\n  vault   ${contracts.vault}\n  token   ${contracts.token}\n`);
 
 // --- 1. Load through the SDK ------------------------------------------------

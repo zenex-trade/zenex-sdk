@@ -76,8 +76,8 @@ function forwardArgs(
 }
 
 /**
- * Operation builder for the Zenex fee forwarder (zenex-util-contracts
- * `fee-forwarder`), scoped to the market router. Each method relays one
+ * Operation builder for the Zenex fee forwarder, one of the Zenex utility
+ * contracts, scoped to the market router. Each method relays one
  * router call and pays `fee.feeAmount` to `fee.feeRecipient` in the same
  * invocation. A failing router call also reverts the fee. Every method
  * returns a base64-encoded XDR operation.

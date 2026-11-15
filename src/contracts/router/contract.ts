@@ -22,8 +22,8 @@ function priceBuffer(price: Buffer | Uint8Array): Buffer {
 }
 
 /**
- * Operation builder for the Zenex market router (zenex-util-contracts
- * `market-router`): generic batching plus the create-and-fill flows. The
+ * Operation builder for the Zenex market router, one of the Zenex utility
+ * contracts: generic batching plus the create-and-fill flows. The
  * router collects no fee and needs no authorization. Every method returns a
  * base64-encoded XDR operation.
  *

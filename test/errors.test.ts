@@ -18,7 +18,7 @@ import {
 //   treasury/src/lib.rs            (TreasuryError, 900)
 //   OpenZeppelin ownable           (OwnableError 2100-2102, RoleTransferError 2200-2203)
 //   OpenZeppelin fee-abstraction   (FeeAbstractionError, 5000-5006)
-// and against the zenex-util-contracts v0.0.2 sources and spec-sig output:
+// and against the Zenex utility contracts v0.0.2 sources and spec output:
 //   fee-forwarder/src/lib.rs       (FeeForwarderError, 6001-6002)
 //   session-policy/src/lib.rs      (SessionPolicyError, 4002-4007)
 //   referral/src/lib.rs            (ReferralError, 7001)
@@ -394,7 +394,7 @@ describe('zenexErrorFromCode (resolution without a hint)', () => {
         expect(zenexErrorFromCode(793).code).toBe(ZenexErrorCode.OraclePriceAhead);
     });
 
-    it('describes 782/783/793 in two-tier staleness terms (contracts #169)', () => {
+    it('describes 782/783/793 in two-tier staleness terms', () => {
         // 782 fires against whichever window the call selected, so the message
         // must not imply a single global threshold.
         const stale = zenexErrorFromCode(782).message;

@@ -33,8 +33,8 @@ import treasuryFixture from './fixtures/specs/treasury.json';
 // contract class that consumes it — that a class reads its own generated
 // export and nothing else. They deliberately do NOT pin artifact provenance
 // (source commit, toolchain, per-WASM hashes): specs are generated from the
-// release WASMs, and the zenex-ops deployer and verifier check artifact hashes
-// before anything reaches chain.
+// release WASMs, whose hashes are checked on the deployment path before
+// anything reaches chain.
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 const contracts = [

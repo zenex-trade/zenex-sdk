@@ -14,11 +14,11 @@ import { OrderKind } from '../../src/contracts/market/types.js';
 //   1. against the forwarder's own spec encoder (`funcArgsToScVals`), with the
 //      router arguments encoded by the router's spec encoder, so neither side
 //      reuses the binding's hand-built ScVals;
-//   2. against the envelope zenex-trade validates (src/wallet/submit.ts:
-//      forwarderFunction, forwarderTargetFunction, expectedForwarderFunction,
-//      validatePreparedForwarderFunc), ported below slot for slot;
-//   3. against the relayer plugin's slot table (relayer-plugin-zenex
-//      src/plugin/parse.ts: ROUTES, FORWARDER_SLOT, TARGET_SLOT, signedArgs).
+//   2. against the envelope the trading frontend validates before it signs
+//      (the route-to-entry mapping and the slots it commits to), ported
+//      below slot for slot;
+//   3. against the relayer's slot table (its routes, forwarder slots, target
+//      slots and signed arguments).
 // =============================================================================
 
 const FORWARDER = StrKey.encodeContract(Buffer.alloc(32, 1));
@@ -195,7 +195,7 @@ describe('FeeForwarderContract.authorizedArgs (the require_auth_for_args payload
     });
 
     it("matches the relayer's signedArgs projection of the built operation", () => {
-        // relayer-plugin-zenex parse.ts: SIGNED_SLOTS, plus target_args for `forward`.
+        // The relayer's signed slots, plus target_args for `forward`.
         const SIGNED_SLOTS = [0, 2, 3, 8, 4, 5];
         const cases: [string, ForwardTarget, boolean][] = [
             [forwarder.forwardMulticall(ROUTER, calls, USER, FEE), 'multicall', true],
@@ -211,9 +211,9 @@ describe('FeeForwarderContract.authorizedArgs (the require_auth_for_args payload
     });
 });
 
-describe('FeeForwarderContract vs the zenex-trade relay envelope', () => {
-    // zenex-trade src/wallet/submit.ts, ported: the route-to-entry mapping and
-    // the slots validatePreparedForwarderFunc commits to.
+describe('FeeForwarderContract vs the trading frontend relay envelope', () => {
+    // The frontend's pre-signing validation, ported: the route-to-entry
+    // mapping and the slots it commits to.
     type Mode = 'calls' | 'fill' | 'try-fill';
     const forwarderFunction = (mode: Mode) => (mode === 'calls' ? 'forward' : 'forward_dynamic');
     const forwarderTargetFunction = (mode: Mode) =>
@@ -292,7 +292,7 @@ describe('FeeForwarderContract vs the zenex-trade relay envelope', () => {
 });
 
 describe('FeeForwarderContract vs the relayer plugin slot table', () => {
-    // relayer-plugin-zenex src/plugin/parse.ts.
+    // The relayer's own slot table, ported.
     const ROUTES = {
         calls: { entry: 'forward', target: 'multicall' },
         'try-fill': { entry: 'forward_dynamic', target: 'create_and_try_fill' },
