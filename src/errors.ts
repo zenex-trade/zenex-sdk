@@ -860,7 +860,10 @@ function contractCode(text: string): number | undefined {
  *    account or session policy reject) only in the log, on the
  *    `failed account authentication` event. That event's code is returned.
  *    Without the event there is no code: any other contract error in the
- *    log is one the invocation survived.
+ *    log is one the invocation survived. The code is the account's own, and
+ *    an account that is not a Zenex smart account numbers its errors as it
+ *    likes: only 3000-3016 and 4002-4007 are the catalog's account codes.
+ *    `parseError` decodes no other number from this event.
  * 3. Any other leading host error (`Budget`, `Storage`, `WasmVm`, ...) is
  *    not a contract failure: `undefined`, whatever the log holds.
  * 4. Text with no leading host error, such as a single diagnostic line, is

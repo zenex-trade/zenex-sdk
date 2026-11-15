@@ -16,6 +16,21 @@ export { ZenexError, ZenexErrorCode, zenexErrorFromCode } from './errors.js';
 const HOST_ERROR_PATTERN = /Error\((\w+), ([^)]*)\)/;
 /** The recording-mode diagnostic for a `require_auth` below the root invocation. */
 const NON_ROOT_AUTH = 'not tied to the root contract invocation';
+/** The diagnostic section of a simulation error: `Event log (newest first):`. */
+const EVENT_LOG_PATTERN = /Event log\b/;
+/**
+ * The message of the host's diagnostic for an account contract whose
+ * `__check_auth` failed. The account's own error follows it in the event.
+ */
+const ACCOUNT_AUTH_FAILURE = 'failed account authentication';
+/**
+ * The code ranges the catalog assigns to account-side contracts: the smart
+ * account (3000-3016) and the session policy (4002-4007).
+ */
+const ACCOUNT_CODE_RANGES: readonly (readonly [number, number])[] = [
+    [3000, 3016],
+    [4002, 4007],
+];
 /** Longest raw text an UnknownError message carries. */
 const MAX_DETAIL = 200;
 
@@ -32,6 +47,15 @@ const MAX_DETAIL = 200;
  * A failed simulation is read by the rule `parseContractErrorCode` states:
  * the host error that ended the invocation decides, and a contract error
  * the invocation survived, listed only in the event log, is not reported.
+ *
+ * A leading `Error(Auth, ...)` is an account contract's failed
+ * `__check_auth`. The account's own code sits on the
+ * `failed account authentication` diagnostic event: it is read from the
+ * response's `events`, then from an event log in the error text. Only a
+ * smart-account (3000-3016) or session-policy (4002-4007) code is decoded
+ * there. An account that is not a Zenex smart account numbers its errors as
+ * it likes, so any other number returns `UnknownError` with the number in
+ * its message, never the market or verifier error of the same number.
  *
  * A contract code in 2-13, the range the token and the price verifier
  * share, is decided from the failed simulation itself. Its diagnostic events
@@ -105,6 +129,11 @@ function fromSimulationError(
     hint: ZenexErrorSource | undefined,
     events: unknown,
 ): ZenexError {
+    if (leadingHostError(raw) === 'Auth') {
+        // The code of a failed account authentication is the account's own.
+        const account = accountAuthCode(events) ?? parseContractErrorCode(raw);
+        if (account !== undefined) return fromAccountCode(account);
+    }
     const code = parseContractErrorCode(raw);
     const resolved =
         code === undefined ? undefined : resolve(code, hint ?? failingSource(code, raw, events));
@@ -124,6 +153,61 @@ function fromSimulationError(
         );
     }
     return unknown(`Host error ${host[0]}`);
+}
+
+/**
+ * The type of the host error that ended the invocation: the first one ahead
+ * of the event log, as `parseContractErrorCode` reads it.
+ */
+function leadingHostError(raw: string): string | undefined {
+    const log = EVENT_LOG_PATTERN.exec(raw);
+    const header = log === null ? raw : raw.slice(0, log.index);
+    return HOST_ERROR_PATTERN.exec(header)?.[1];
+}
+
+/**
+ * The account contract's own code from the newest
+ * `failed account authentication` event of a simulation's diagnostic
+ * events, or `undefined` when they hold none. The public RPC returns the
+ * events and no event log in the error text, so the code is only here.
+ */
+function accountAuthCode(events: unknown): number | undefined {
+    if (!Array.isArray(events)) return undefined;
+    try {
+        const diagnostics = events as xdr.DiagnosticEvent[];
+        // Newest first, as the event log lists them.
+        for (let index = diagnostics.length - 1; index >= 0; index--) {
+            const event = diagnostics[index].event();
+            if (event.type().name !== 'diagnostic') continue;
+            const body = event.body().v0();
+            if (text(body.topics()[0]) !== 'error') continue;
+            // The host logs [message, account address, the account's error].
+            const data = body.data();
+            const values = data.switch().name === 'scvVec' ? (data.vec() ?? []) : [];
+            if (text(values[0])?.startsWith(ACCOUNT_AUTH_FAILURE) !== true) continue;
+            for (const value of values) {
+                const code = contractErrorCode(value);
+                if (code !== undefined) return code;
+            }
+            return undefined;
+        }
+    } catch {
+        // Not the events of a simulation: the text decides.
+    }
+    return undefined;
+}
+
+/**
+ * The error for a code an account contract failed its authentication with.
+ * Only the catalog's account-side codes decode; another number is the
+ * account's own business and stays unknown, with the number kept.
+ */
+function fromAccountCode(code: number): ZenexError {
+    const known = ACCOUNT_CODE_RANGES.some(([first, last]) => code >= first && code <= last);
+    return (
+        (known ? resolve(code) : undefined) ??
+        unknown(`Unknown account contract error Error(Contract, #${code})`)
+    );
 }
 
 /**

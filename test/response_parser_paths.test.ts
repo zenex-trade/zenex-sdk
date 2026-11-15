@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { xdr, nativeToScVal } from '@stellar/stellar-sdk';
+import { Address, StrKey, xdr, nativeToScVal } from '@stellar/stellar-sdk';
+import { parseContractErrorCode } from '../src/errors.js';
 import { parseError, parseResult, ZenexErrorCode } from '../src/response_parser.js';
 
 // =============================================================================
@@ -8,13 +9,71 @@ import { parseError, parseResult, ZenexErrorCode } from '../src/response_parser.
 // (resultXdr), plus both parseResult retrieval branches.
 // =============================================================================
 
-function simulationError(message: string) {
+function simulationError(message: string, events: xdr.DiagnosticEvent[] = []) {
     return {
         id: 'sim-1',
         latestLedger: 1,
-        events: [],
+        events,
         error: message,
     } as never;
+}
+
+const ACCOUNT = StrKey.encodeContract(Buffer.alloc(32, 9));
+const MARKET = StrKey.encodeContract(Buffer.alloc(32, 1));
+
+/** A diagnostic `error` event, as the RPC returns it: decoded from its XDR. */
+function diagnosticError(
+    contract: string | null,
+    error: xdr.ScError,
+    data: xdr.ScVal,
+): xdr.DiagnosticEvent {
+    const event = new xdr.DiagnosticEvent({
+        inSuccessfulContractCall: false,
+        event: new xdr.ContractEvent({
+            ext: new xdr.ExtensionPoint(0),
+            contractId:
+                contract === null ? null : (StrKey.decodeContract(contract) as unknown as xdr.Hash),
+            type: xdr.ContractEventType.diagnostic(),
+            body: new xdr.ContractEventBody(
+                0,
+                new xdr.ContractEventV0({
+                    topics: [xdr.ScVal.scvSymbol('error'), xdr.ScVal.scvError(error)],
+                    data,
+                }),
+            ),
+        }),
+    });
+    return xdr.DiagnosticEvent.fromXDR(event.toXDR());
+}
+
+/**
+ * The host's event for an account contract whose `__check_auth` failed with
+ * `code`: no emitting contract, an `Error(Auth, InvalidAction)` topic, and
+ * the account's own error last in the data.
+ */
+function authFailureEvent(code: number): xdr.DiagnosticEvent {
+    return diagnosticError(
+        null,
+        xdr.ScError.sceAuth(xdr.ScErrorCode.scecInvalidAction()),
+        xdr.ScVal.scvVec([
+            xdr.ScVal.scvString('failed account authentication with error'),
+            Address.fromString(ACCOUNT).toScVal(),
+            xdr.ScVal.scvError(xdr.ScError.sceContract(code)),
+        ]),
+    );
+}
+
+/** A contract error a caller caught: `contract try_call failed`. */
+function contractErrorEvent(code: number): xdr.DiagnosticEvent {
+    return diagnosticError(
+        MARKET,
+        xdr.ScError.sceContract(code),
+        xdr.ScVal.scvVec([
+            xdr.ScVal.scvString('contract try_call failed'),
+            xdr.ScVal.scvSymbol('execute_order'),
+            xdr.ScVal.scvVec([]),
+        ]),
+    );
 }
 
 function txFailedResult() {
@@ -100,6 +159,105 @@ describe('parseError: the host error that ended the simulation decides', () => {
             ),
         );
         expect(error.code).toBe(ZenexErrorCode.SessionTransferNotAllowed);
+    });
+
+    it('reads the account code from the response events, which the public RPC returns in place of a log', () => {
+        // The RPC's error text is the host error alone: the account's own
+        // code is only on the diagnostic event.
+        const response = simulationError('HostError: Error(Auth, InvalidAction)', [
+            authFailureEvent(4004),
+        ]);
+        expect(parseContractErrorCode('HostError: Error(Auth, InvalidAction)')).toBeUndefined();
+        const error = parseError(response);
+        expect(error.code).toBe(ZenexErrorCode.SessionTransferNotAllowed);
+        expect(error.source).toBeUndefined();
+
+        const smartAccount = parseError(
+            simulationError('HostError: Error(Auth, InvalidAction)', [authFailureEvent(3003)]),
+        );
+        expect(smartAccount.code).toBe(ZenexErrorCode.SmartAccountExternalVerificationFailed);
+    });
+
+    it('takes the newest account-authentication event, and the events before the text', () => {
+        const events = [authFailureEvent(3003), contractErrorEvent(741), authFailureEvent(4002)];
+        const text =
+            'HostError: Error(Auth, InvalidAction)' +
+            LOG +
+            '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #4006)]';
+        expect(parseError(simulationError(text, events)).code).toBe(
+            ZenexErrorCode.SessionContractNotAllowed,
+        );
+        // Events that hold no such event leave the text to decide.
+        expect(parseError(simulationError(text, [contractErrorEvent(741)])).code).toBe(4006);
+    });
+
+    it('never takes a contract error the invocation survived from the events', () => {
+        const error = parseError(
+            simulationError('HostError: Error(Auth, InvalidAction)', [contractErrorEvent(741)]),
+        );
+        expect(error.code).toBe(ZenexErrorCode.UnknownError);
+        expect(error.message).toBe('Host error Error(Auth, InvalidAction)');
+    });
+
+    it.each([
+        // A market code, a code the token and the verifier share, a governance
+        // code, and the gaps beside the two account ranges.
+        713, 12, 810, 2999, 3017, 4001, 4008, 99_999,
+    ])('does not decode %i from an account that is not a Zenex smart account', (code) => {
+        const expected = `Unknown account contract error Error(Contract, #${code})`;
+        const fromEvents = parseError(
+            simulationError('HostError: Error(Auth, InvalidAction)', [authFailureEvent(code)]),
+        );
+        expect(fromEvents.code).toBe(ZenexErrorCode.UnknownError);
+        expect(fromEvents.message).toBe(expected);
+
+        const fromText = parseError(
+            simulationError(
+                'HostError: Error(Auth, InvalidAction)' +
+                    LOG +
+                    `   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #${code})]`,
+            ),
+        );
+        expect(fromText.code).toBe(ZenexErrorCode.UnknownError);
+        expect(fromText.message).toBe(expected);
+        // A hint does not turn the account's number into a verifier error.
+        const hinted = parseError(
+            simulationError('HostError: Error(Auth, InvalidAction)', [authFailureEvent(code)]),
+            'verifier',
+        );
+        expect(hinted.code).toBe(ZenexErrorCode.UnknownError);
+    });
+
+    it('keeps the number of an account code inside the ranges that the catalog does not define', () => {
+        // 3001 sits inside 3000-3016 but no contract defines it.
+        const error = parseError(
+            simulationError('HostError: Error(Auth, InvalidAction)', [authFailureEvent(3001)]),
+        );
+        expect(error.code).toBe(ZenexErrorCode.UnknownError);
+        expect(error.message).toBe('Unknown account contract error Error(Contract, #3001)');
+    });
+
+    it('decodes every catalogued account code behind a leading auth error', () => {
+        const accountCodes = Object.values(ZenexErrorCode).filter(
+            (value): value is number =>
+                typeof value === 'number' &&
+                ((value >= 3000 && value <= 3016) || (value >= 4002 && value <= 4007)),
+        );
+        expect(accountCodes.length).toBeGreaterThan(20);
+        for (const code of accountCodes) {
+            const error = parseError(
+                simulationError('HostError: Error(Auth, InvalidAction)', [authFailureEvent(code)]),
+            );
+            expect(error.code, `code ${code}`).toBe(code);
+        }
+    });
+
+    it('still decodes a market code that ended the invocation itself', () => {
+        // The range applies to the authentication path only.
+        const error = parseError(
+            simulationError('HostError: Error(Contract, #713)', [contractErrorEvent(713)]),
+        );
+        expect(error.code).toBe(ZenexErrorCode.InsufficientMargin);
     });
 
     it('names a leading auth error that hides no contract code', () => {
