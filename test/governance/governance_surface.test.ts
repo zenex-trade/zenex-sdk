@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { xdr, nativeToScVal, scValToNative, Address, StrKey } from '@stellar/stellar-sdk';
 import { GovernanceContract } from '../../src/contracts/governance/contract.js';
-import { decodeGovernanceEvent, GovernanceEventType } from '../../src/contracts/governance/events.js';
-import { NormalizedEvent } from '../../src/base_event.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 1));
 const OWNER = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 2));
@@ -14,14 +12,6 @@ function decodeInvoke(op: string) {
     return {
         fn: invoke.functionName().toString(),
         args: invoke.args().map((a) => scValToNative(a)),
-    };
-}
-
-function normalized(eventType: string, topicArgs: unknown[], data: Record<string, unknown>): NormalizedEvent {
-    return {
-        contractId: CONTRACT_ID, txHash: 't', ledger: 1,
-        ledgerClosedAt: '2026-07-06T00:00:00Z', id: 'e-1',
-        eventType, topicArgs, data,
     };
 }
 

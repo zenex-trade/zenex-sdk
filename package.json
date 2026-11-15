@@ -25,6 +25,7 @@
         "prepublishOnly": "npm test && npm run architecture:check",
         "test": "vitest run",
         "test:coverage": "vitest run --coverage",
+        "typecheck": "tsc -p tsconfig.test.json",
         "specs:generate": "node scripts/contract-specs.mjs generate",
         "specs:check": "node scripts/contract-specs.mjs check",
         "architecture:check": "node scripts/check-architecture.mjs",

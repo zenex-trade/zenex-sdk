@@ -1,14 +1,6 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { rpc, xdr, nativeToScVal, scValToNative, Address, StrKey } from '@stellar/stellar-sdk';
+import { describe, it, expect } from 'vitest';
+import { xdr, nativeToScVal, scValToNative, Address, StrKey } from '@stellar/stellar-sdk';
 import { VaultContract } from '../../src/contracts/vault/contract.js';
-import { decodeVaultEvent, VaultEventType } from '../../src/contracts/vault/events.js';
-import { NormalizedEvent } from '../../src/base_event.js';
-import { contractInstanceLedgerKey, tokenBalanceLedgerKey } from '../../src/contracts/keys.js';
-import {
-    vaultInstanceScVal,
-    balanceMapScVal,
-    ledgerEntryFor,
-} from '../helpers/market_state.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 1));
 const OWNER = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 2));

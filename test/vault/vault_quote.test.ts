@@ -241,7 +241,6 @@ function market(overrides: Partial<MarketData> = {}): MarketData {
         accruedAt: 2n,
         creditPool: 0n,
         creditOwed: 0n,
-        lastPriceTime: 0n,
         ...overrides,
     };
 }
@@ -358,7 +357,6 @@ function marketContext(id: string): {
                 inputs.short_tokens as bigint,
             ),
             accruedAt: now,
-            lastPriceTime: inputs.created_at as bigint,
         }),
         config: config({
             keeperRate: inputs.keeper_rate as bigint,
