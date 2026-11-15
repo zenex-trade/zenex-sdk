@@ -480,9 +480,9 @@ export interface MaxMarginForBalance {
      */
     readonly orderMargin: bigint;
     /**
-     * The `notional` argument of the order, token-dec: the solved position
-     * margin times the leverage, rounded down, and never more than the
-     * initial-margin floor allows for that margin.
+     * The `notional` argument of the order, token-dec: the largest size the
+     * position margin it leaves carries at the leverage and at the
+     * initial-margin floor. One atomic unit more does not fit.
      */
     readonly notional: bigint;
     /**
@@ -509,25 +509,34 @@ export interface MaxMarginForBalance {
  * - `positionMargin = orderMargin - tradeFee(notional)` is what the
  *   position holds.
  *
- * `notional` is the largest size with `positionMargin * leverage >=
- * notional`, found against the fee model (base fee at the side's rate plus
- * the size-quadratic impact fee). Build the order from the result:
+ * `notional` is the largest size that fits: the position margin it leaves
+ * carries it at the leverage (`positionMargin * leverage >= notional`) and
+ * at the market's initial margin (`positionMargin >= ceil(initMargin *
+ * notional)`). It is searched against the fee model (base fee at the side's
+ * rate plus the size-quadratic impact fee) in exact integers, and
+ * `notional + 1` does not fit. That makes it the largest size of all
+ * whenever a larger open never pays a smaller fee, which holds apart from
+ * the one-unit rounding of the skew split. Build the order from the result:
  *
  * ```ts
  * const max = maxMarginForBalance(market, true, balance, 5, price);
- * const order = intent.openMarket({ notional: max.notional, margin: max.orderMargin });
+ * const order = intent.openMarket({ notional: max.notional, margin: max.orderMargin, price });
  * ```
  *
  * That order escrows exactly `balance`, and its fill leaves a position of
  * `max.positionMargin` at no more than the chosen leverage. A leverage above
- * what the market's initial margin allows is capped at that maximum, so the
- * order passes the initial-margin gate (713) at any leverage.
+ * what the market's initial margin allows is capped at that maximum.
  *
- * The fees are those of an open on a flat side at this snapshot. An
- * increase of an existing position also settles its pending funding and
- * borrowing out of the margin, which this does not count. The other gates
- * (position and order minimums, the open-interest and utilization caps) are
- * not solved for: preview the order.
+ * The fees are those of an open on a flat side, with the snapshot's book
+ * and fee side at the fill. Under those conditions the fill passes the
+ * initial-margin gate (`InsufficientMargin`, 713) at any leverage. It can
+ * still fail it when the book flips the fee side before the fill, or on an
+ * increase of an existing position, which also settles its pending funding
+ * and borrowing out of the margin. The other gates are not solved for: the
+ * position and order minimums, the open-interest and utilization caps, and
+ * the maintenance gate (`PositionLiquidatable`, 723), which a fill fails
+ * when the fees of closing the new position would leave it under its
+ * maintenance margin. Preview the order.
  *
  * All three values are exact integers in atomic token units. For an input
  * field, format one with `formatTokenFloor(value, market.assetDecimals)`.
@@ -535,7 +544,7 @@ export interface MaxMarginForBalance {
  * @param leverage Notional over position margin, read to four decimals.
  * @returns The order's `notional` and `margin` and the resulting position
  *   margin. All `0n` when the balance does not cover the execution fee, the
- *   leverage is not positive, or no size is affordable.
+ *   leverage is not a positive finite number, or no size is affordable.
  */
 export function maxMarginForBalance(
     market: Market,
@@ -545,7 +554,8 @@ export function maxMarginForBalance(
     price: PriceInput,
 ): MaxMarginForBalance {
     const none = { orderMargin: 0n, notional: 0n, positionMargin: 0n };
-    if (balance <= market.config.execFee || !(leverage > 0)) return none;
+    if (balance <= market.config.execFee) return none;
+    if (!Number.isFinite(leverage) || leverage <= 0) return none;
     const priceData = marketPrice(market, price, quoteTime(market));
     const entry = isLong ? priceData.ask : priceData.bid;
     if (entry <= 0n) return none;
@@ -553,36 +563,42 @@ export function maxMarginForBalance(
     const initMargin = market.config.initMargin;
     const budget = balance - market.config.execFee;
 
-    // The size a position margin carries: the leverage, capped where the
-    // initial-margin floor `ceil(initMargin * notional) <= margin` binds.
-    const notionalFor = (margin: bigint): bigint => {
-        const levered = (margin * leverageScaled) / LEVERAGE_SCALE;
-        if (initMargin <= 0n) return levered;
-        const floor = (margin * SCALAR_18) / initMargin;
-        return levered < floor ? levered : floor;
-    };
     const tradeFees = (notional: bigint): bigint => {
         const tokens = entryTokens(notional, entry, isLong);
         const fees = quoteTradeFees(market.data, market.config, isLong, notional, tokens);
         return fees.base + fees.impact;
     };
 
-    // margin + fees grows monotonically with margin, so binary search the
-    // largest position margin whose all-in cost still fits the budget.
+    // No size above what the whole budget carries fits, since the position
+    // margin never exceeds the budget.
+    let high = (budget * leverageScaled) / LEVERAGE_SCALE;
+    if (initMargin > 0n) {
+        const floor = (budget * SCALAR_18) / initMargin;
+        if (floor < high) high = floor;
+    }
+    // Size zero fits and `high + 1` does not, and the search keeps both:
+    // `low` fits and `high + 1` does not. So it ends on a size that fits
+    // whose successor does not, whatever the fees do in between.
     let low = 0n;
-    let high = budget;
     while (low < high) {
         const mid = low + (high - low + 1n) / 2n;
-        if (mid + tradeFees(notionalFor(mid)) <= budget) low = mid;
+        if (fits(mid)) low = mid;
         else high = mid - 1n;
     }
-    const notional = notionalFor(low);
-    if (notional <= 0n) return none;
-    // The order carries the whole budget, so the position keeps the budget
-    // less the fees of the size: at least `low`, by the search.
+    if (low <= 0n) return none;
     return {
         orderMargin: budget,
-        notional,
-        positionMargin: budget - tradeFees(notional),
+        notional: low,
+        positionMargin: budget - tradeFees(low),
     };
 }
+    // Whether the order of this size and the whole budget as its margin
+    // fits: the position keeps the budget less the fees, and that margin
+    // carries the size at the leverage and at the initial-margin floor,
+    // `ceil(initMargin * notional) <= margin`, the gate the fill measures.
+    const fits = (notional: bigint): boolean => {
+        const margin = budget - tradeFees(notional);
+        if (margin < 0n) return false;
+        if (notional * LEVERAGE_SCALE > margin * leverageScaled) return false;
+        return initMargin <= 0n || notional * initMargin <= margin * SCALAR_18;
+    };
