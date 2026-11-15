@@ -5,54 +5,70 @@
 //
 // The SDK binds what is deployed, so the specs come from release artifacts:
 //
-// - The core contracts come from `wasm/` in the zenex-contracts checkout. That
-//   is the release build `make release` commits, the same bytes the deployer
-//   uploads.
-// - The market router moved to zenex-util-contracts (zenex-contracts #220),
-//   which also holds the fee forwarder. That repo publishes its release
-//   WASMs as attested GitHub release assets rather than committing them, so
-//   both come from its build output: run `make build` there at the released
-//   tag.
+// - The core contracts (market, strategy vault, factory, oracle, treasury,
+//   governance) are the release assets of
+//   https://github.com/zenex-trade/zenex-contracts. Download the assets of
+//   the bound release into one directory and point ZENEX_CONTRACTS_WASM_DIR
+//   at it.
+// - The market router and fee forwarder are the Zenex utility contracts.
+//   Point ZENEX_UTIL_CONTRACTS_WASM_DIR at a directory holding their
+//   release WASMs, or ZENEX_UTIL_CONTRACTS_ROOT at a source checkout built
+//   at the bound tag (its `target/wasm32v1-none/release` is read).
+//
+// A WASM is found in its directory under any of these names, tried in order
+// for the crate name `strategy_vault`:
+//
+//   strategy_vault.wasm            the crate name, as cargo builds it
+//   strategy-vault.wasm            the package name
+//   strategy-vault_v1.0.0.wasm     a published release asset
+//   strategy_vault_v1.0.0.wasm
+//
+// A directory that holds release assets of more than one version for the
+// same contract is ambiguous and fails.
+//
+// Without ZENEX_CONTRACTS_WASM_DIR the core contracts are read from the
+// build output of a source checkout: ZENEX_CONTRACTS_ROOT, or the sibling
+// `../zenex-contracts`, under `target/wasm32v1-none/release`.
 //
 // A contract's spec is a custom section inside its own WASM, so `Spec.fromWasm`
 // reads it directly: no Stellar CLI, no temp dirs, no TypeScript AST parsing.
 //
-// ZENEX_CONTRACTS_ROOT and ZENEX_UTIL_CONTRACTS_ROOT move the two checkouts.
-// ZENEX_CONTRACTS_WASM_DIR points the core contracts at another directory,
-// such as `target/wasm32v1-none/release`, to bind an unreleased build.
-//
 // This script does not verify provenance. It pins no source commit and no
-// per-WASM hashes. Deployment provenance belongs to the zenex-ops deployer
-// and verifier, which check every artifact hash on the deploy path.
+// per-WASM hashes. Check a downloaded asset against the checksums and the
+// build attestation published with its release.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { contract } from '@stellar/stellar-sdk';
 
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-// The sibling defaults track the standard workspace layout; the env overrides
-// cover everything else. A bare absolute path here silently rotted once
-// already: the checkout moved and every run died on ENOENT.
-const contractsRoot = resolve(
-    process.env.ZENEX_CONTRACTS_ROOT ?? resolve(sdkRoot, '../zenex-contracts'),
-);
-const utilContractsRoot = resolve(
-    process.env.ZENEX_UTIL_CONTRACTS_ROOT
-        ?? resolve(sdkRoot, '../zenex-util-contracts'),
-);
+const BUILD_OUTPUT = 'target/wasm32v1-none/release';
+
 const coreWasmDir = resolve(
-    process.env.ZENEX_CONTRACTS_WASM_DIR ?? resolve(contractsRoot, 'wasm'),
+    process.env.ZENEX_CONTRACTS_WASM_DIR
+        ?? resolve(
+            process.env.ZENEX_CONTRACTS_ROOT ?? resolve(sdkRoot, '../zenex-contracts'),
+            BUILD_OUTPUT,
+        ),
 );
-const utilWasmDir = resolve(utilContractsRoot, 'target/wasm32v1-none/release');
+// The utility contracts have no default location: one of the two variables
+// names it.
+const utilWasmDir = process.env.ZENEX_UTIL_CONTRACTS_WASM_DIR
+    ? resolve(process.env.ZENEX_UTIL_CONTRACTS_WASM_DIR)
+    : process.env.ZENEX_UTIL_CONTRACTS_ROOT
+        ? resolve(process.env.ZENEX_UTIL_CONTRACTS_ROOT, BUILD_OUTPUT)
+        : undefined;
 
-const CORE_HINT = 'Download the release WASMs of zenex-contracts and point '
-    + 'ZENEX_CONTRACTS_WASM_DIR at them, named as the crates are (strategy_vault.wasm).';
-const UTIL_HINT = 'Run `make build` in zenex-util-contracts at the released tag, '
-    + 'or point ZENEX_UTIL_CONTRACTS_ROOT at it.';
+const CORE_HINT = 'Download the release assets of '
+    + 'https://github.com/zenex-trade/zenex-contracts into one directory and '
+    + 'point ZENEX_CONTRACTS_WASM_DIR at it.';
+const UTIL_HINT = 'Point ZENEX_UTIL_CONTRACTS_WASM_DIR at the utility contracts\' '
+    + 'release WASMs, or ZENEX_UTIL_CONTRACTS_ROOT at a source checkout built '
+    + 'at the bound tag.';
 
-// Keyed by WASM stem (also the fixture filename), with the directory the WASM
-// is read from. Order fixes the layout of the generated module.
+// Keyed by crate name (also the fixture filename), with the directory the
+// WASM is read from. Order fixes the layout of the generated module.
 const CONTRACTS = [
     ['market', 'marketSpec', coreWasmDir, CORE_HINT],
     ['market_router', 'marketRouterSpec', utilWasmDir, UTIL_HINT],
@@ -68,11 +84,43 @@ function fail(message) {
     throw new Error(`Contract spec generation failed: ${message}`);
 }
 
+// A published release asset: `<name>_v<semver>.wasm`.
+const RELEASE_SUFFIX = /^_v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\.wasm$/;
+
+/**
+ * The WASM for a crate inside `wasmDir`: the plain crate or package name, or
+ * else its one versioned release asset.
+ */
+export function findWasm(stem, wasmDir, hint) {
+    if (wasmDir === undefined) fail(`no directory configured for ${stem}. ${hint}`);
+    if (!existsSync(wasmDir)) fail(`no directory ${wasmDir} for ${stem}. ${hint}`);
+    const names = [stem, stem.replaceAll('_', '-')];
+    for (const name of names) {
+        const path = resolve(wasmDir, `${name}.wasm`);
+        if (existsSync(path)) return path;
+    }
+    const released = readdirSync(wasmDir).filter((file) =>
+        names.some(
+            (name) => file.startsWith(name) && RELEASE_SUFFIX.test(file.slice(name.length)),
+        ),
+    );
+    if (released.length === 1) return resolve(wasmDir, released[0]);
+    if (released.length > 1) {
+        fail(
+            `${wasmDir} holds more than one release of ${stem} `
+            + `(${released.sort().join(', ')}). Keep one version per directory.`,
+        );
+    }
+    return fail(
+        `no WASM for ${stem} in ${wasmDir} (looked for ${names[0]}.wasm, `
+        + `${names[1]}.wasm and ${names[1]}_v<version>.wasm). ${hint}`,
+    );
+}
+
 async function specEntries(stem, wasmDir, hint) {
-    const wasmPath = resolve(wasmDir, `${stem}.wasm`);
-    if (!existsSync(wasmPath)) fail(`no release WASM for ${stem} at ${wasmPath}. ${hint}`);
+    const wasmPath = findWasm(stem, wasmDir, hint);
     const spec = await contract.Spec.fromWasm(readFileSync(wasmPath));
-    return spec.entries.map((entry) => entry.toXDR('base64'));
+    return { wasmPath, entries: spec.entries.map((entry) => entry.toXDR('base64')) };
 }
 
 function renderGeneratedModule(generated) {
@@ -112,8 +160,11 @@ async function run(mode) {
     }
 
     const generated = new Map();
+    const sources = [];
     for (const [stem, , wasmDir, hint] of CONTRACTS) {
-        generated.set(stem, await specEntries(stem, wasmDir, hint));
+        const { wasmPath, entries } = await specEntries(stem, wasmDir, hint);
+        generated.set(stem, entries);
+        sources.push(`  ${stem.padEnd(15)} ${wasmPath}`);
     }
 
     writeOrCheck(
@@ -130,14 +181,17 @@ async function run(mode) {
     }
 
     process.stdout.write(
-        `Contract specs ${mode === 'generate' ? 'generated' : 'verified'} from `
-        + `${relative(sdkRoot, coreWasmDir)} and ${relative(sdkRoot, utilWasmDir)}.\n`,
+        `Contract specs ${mode === 'generate' ? 'generated' : 'verified'} from:\n`
+        + `${sources.join('\n')}\n`,
     );
 }
 
-try {
-    await run(process.argv[2]);
-} catch (error) {
-    process.stderr.write(`${error.message}\n`);
-    process.exitCode = 1;
+// Run only as a script, so a test can import `findWasm`.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    try {
+        await run(process.argv[2]);
+    } catch (error) {
+        process.stderr.write(`${error.message}\n`);
+        process.exitCode = 1;
+    }
 }
