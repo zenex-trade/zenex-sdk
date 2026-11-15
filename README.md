@@ -488,10 +488,6 @@ npm run specs:check
 `ZENEX_RPC` and `ZENEX_MARKET`, and see the header of
 `scripts/live-check.mjs` for the rest.
 
-## Security
-
-Report a vulnerability as [SECURITY.md](./SECURITY.md) describes.
-
 ## License
 
 MIT
