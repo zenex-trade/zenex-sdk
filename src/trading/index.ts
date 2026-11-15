@@ -11,6 +11,8 @@ export type { MarketUserEntry, PendingOrder } from './user.js';
 export { MarketPosition } from './position.js';
 export {
     OrderIntent,
+    DEFAULT_ORDER_TTL_LEDGERS,
+    DEFAULT_TRIGGER_ORDER_TTL_LEDGERS,
     maxMarginForBalance,
     previewOrder,
     isDecreaseOrderKind,

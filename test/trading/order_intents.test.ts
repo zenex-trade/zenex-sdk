@@ -21,7 +21,12 @@ import {
     withdrawMarginParams,
 } from '../../src/trading/internal/order.js';
 
-import { OrderIntent, previewOrder } from '../../src/trading/order.js';
+import {
+    DEFAULT_ORDER_TTL_LEDGERS,
+    DEFAULT_TRIGGER_ORDER_TTL_LEDGERS,
+    OrderIntent,
+    previewOrder,
+} from '../../src/trading/order.js';
 import { fixtureMarket, flatPosition, px } from './market_fixture.js';
 
 const TRADING = StrKey.encodeContract(Buffer.alloc(32, 1));
@@ -160,6 +165,47 @@ describe('OrderIntent', () => {
         expect(order.triggerPrice).toBe(px(11));
         expect(order.priceBound).toBe(0n);
         expect(previewOrder(market, flatPosition(), order, px(10), 1n).outcome).toBe('rests');
+    });
+
+    describe('order lifetime', () => {
+        const intent = new OrderIntent(market, USER, true);
+        const trigger = { triggerPrice: px(11) };
+        const sized = { notional: 1_000_000_000n, margin: 200_000_000n };
+
+        it('gives market kinds the short default, 60 ledgers', () => {
+            expect(DEFAULT_ORDER_TTL_LEDGERS).toBe(60);
+            const expiration = market.ledger + 60;
+            expect(intent.openMarket(sized).expiration).toBe(expiration);
+            expect(intent.closePosition().expiration).toBe(expiration);
+            expect(intent.decrease({ notional: 1n }).expiration).toBe(expiration);
+            expect(intent.addMargin(1n).expiration).toBe(expiration);
+            expect(intent.withdrawMargin(1n).expiration).toBe(expiration);
+        });
+
+        it('gives trigger kinds the long default, about 30 days', () => {
+            // 30 days at the contract's 17,280 ledgers per day.
+            expect(DEFAULT_TRIGGER_ORDER_TTL_LEDGERS).toBe(30 * 17_280);
+            const expiration = market.ledger + 518_400;
+            expect(intent.stopLoss(trigger).expiration).toBe(expiration);
+            expect(intent.takeProfit(trigger).expiration).toBe(expiration);
+            expect(intent.openLimit({ ...sized, ...trigger }).expiration).toBe(expiration);
+            expect(intent.openStop({ ...sized, ...trigger }).expiration).toBe(expiration);
+        });
+
+        it('keeps the two lifetimes apart when either is set', () => {
+            const custom = new OrderIntent(market, USER, true, 10, 0n, 1_000);
+            expect(custom.openMarket(sized).expiration).toBe(market.ledger + 10);
+            expect(custom.stopLoss(trigger).expiration).toBe(market.ledger + 1_000);
+            // A market lifetime alone leaves trigger orders on their default.
+            const short = new OrderIntent(market, USER, true, 10);
+            expect(short.takeProfit(trigger).expiration).toBe(market.ledger + 518_400);
+        });
+
+        it('stays inside the contract u32 expiration at a mainnet-scale ledger', () => {
+            const late = fixtureMarket({ ledger: 4_000_000_000 });
+            const order = new OrderIntent(late, USER, true).stopLoss(trigger);
+            expect(order.expiration).toBeLessThanOrEqual(0xffff_ffff);
+        });
     });
 
     it('caps a stop entry above the trigger by the intent slippage', () => {

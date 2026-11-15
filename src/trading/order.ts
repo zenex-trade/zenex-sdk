@@ -39,14 +39,40 @@ export {
 };
 
 /**
+ * Default lifetime of a market order, in ledgers: about five minutes. A
+ * market order is meant to fill at once, so a short lifetime keeps a missed
+ * one from filling later at a price the user no longer expects.
+ */
+export const DEFAULT_ORDER_TTL_LEDGERS = 60;
+
+/**
+ * Default lifetime of a trigger order (limit and stop opens, take-profit,
+ * stop-loss), in ledgers: about 30 days at the contract's own 17,280
+ * ledgers per day. A trigger order rests until the price crosses it, so it
+ * needs a lifetime measured in days, not minutes.
+ *
+ * The contract bounds `expiration` only from below: creation rejects one
+ * behind the current ledger (`OrderExpired`, 731), an order fills through
+ * its `expiration` ledger inclusive, and any later `u32` is accepted. Pass
+ * a larger `triggerTtlLedgers` for a longer-lived order.
+ */
+export const DEFAULT_TRIGGER_ORDER_TTL_LEDGERS = 518_400;
+
+/**
  * Order factory bound to one ticket's context: a market snapshot, an owner,
  * and a side. Each method builds one complete, signable `OrderParams` in a
  * single call. Preview it with `previewOrder` or `position.preview`, then
  * sign the identical object.
  *
  * The bound market supplies what a caller would otherwise wire by hand:
- * `expiration` derives from `market.ledger + ttlLedgers`, and a fill bound
- * derives from `slippageBps` against the execution price the kind fills at.
+ * `expiration` derives from `market.ledger` plus a lifetime, and a fill
+ * bound derives from `slippageBps` against the execution price the kind
+ * fills at. The lifetime depends on the kind: market orders (`openMarket`,
+ * `closePosition`, `decrease`, `addMargin`, `withdrawMargin`) live
+ * `ttlLedgers`, 60 by default, and trigger orders (`openLimit`, `openStop`,
+ * `takeProfit`, `stopLoss`) live `triggerTtlLedgers`, 518,400 by default
+ * (about 30 days). An expired order no longer fills and its escrow stays in
+ * the market until the order is cancelled.
  * The methods also encode the contract's conventions that `OrderKind` alone
  * does not express: the `FULL_CLOSE` sentinel, margin-only orders as
  * `notional: 0n`, and the trigger-direction rules for entries and TP/SL.
@@ -59,19 +85,34 @@ export class OrderIntent {
         public user: string,
         /** Side every built order targets. */
         public isLong: boolean,
-        /** Default order lifetime in ledgers (`expiration = market.ledger + ttlLedgers`). */
-        public ttlLedgers: number = 60,
+        /** Lifetime of a market order in ledgers (`expiration = market.ledger + ttlLedgers`). Defaults to {@link DEFAULT_ORDER_TTL_LEDGERS}, 60. */
+        public ttlLedgers: number = DEFAULT_ORDER_TTL_LEDGERS,
         /** Default maximum adverse slippage, basis points (10_000 = 100%). 0 = unbounded, matching the contract's own default. */
         public slippageBps: bigint = 0n,
+        /**
+         * Lifetime of a trigger order in ledgers
+         * (`expiration = market.ledger + triggerTtlLedgers`): limit and stop
+         * opens, take-profit and stop-loss. Defaults to
+         * {@link DEFAULT_TRIGGER_ORDER_TTL_LEDGERS}, 518,400 (about 30 days).
+         * `ttlLedgers` does not apply to these kinds.
+         */
+        public triggerTtlLedgers: number = DEFAULT_TRIGGER_ORDER_TTL_LEDGERS,
     ) {}
 
-    private base(): { market: string; user: string; isLong: boolean; expiration: number } {
+    private base(
+        ttlLedgers: number = this.ttlLedgers,
+    ): { market: string; user: string; isLong: boolean; expiration: number } {
         return {
             market: this.market.id,
             user: this.user,
             isLong: this.isLong,
-            expiration: this.market.ledger + this.ttlLedgers,
+            expiration: this.market.ledger + ttlLedgers,
         };
+    }
+
+    /** The base of a trigger order: as `base`, with the trigger lifetime. */
+    private triggerBase(): ReturnType<OrderIntent['base']> {
+        return this.base(this.triggerTtlLedgers);
     }
 
     /** @throws {RangeError} when a slippage bound is configured but no price was given to measure it against. */
@@ -124,7 +165,7 @@ export class OrderIntent {
         triggerPrice: bigint;
     }): OrderParams {
         return openLimitParams({
-            ...this.base(),
+            ...this.triggerBase(),
             notional: args.notional,
             margin: args.margin,
             triggerPrice: args.triggerPrice,
@@ -140,7 +181,7 @@ export class OrderIntent {
      * breakout entry that a long fills at or above the trigger and a short
      * at or below. The bound is measured against the trigger, so a nonzero
      * `slippageBps` caps how far past it a gap may fill; beyond that the
-     * order rests (#741) until the price comes back.
+     * order rests (error 741) until the price comes back.
      */
     openStop(args: {
         /** Size to open, token-dec. */
@@ -151,7 +192,7 @@ export class OrderIntent {
         triggerPrice: bigint;
     }): OrderParams {
         return openStopParams({
-            ...this.base(),
+            ...this.triggerBase(),
             notional: args.notional,
             margin: args.margin,
             triggerPrice: args.triggerPrice,
@@ -218,7 +259,7 @@ export class OrderIntent {
         slippageBps?: bigint;
     }): OrderParams {
         return takeProfitParams({
-            ...this.base(),
+            ...this.triggerBase(),
             triggerPrice: args.triggerPrice,
             notional: args.notional,
             priceBound: this.bound(
@@ -235,7 +276,7 @@ export class OrderIntent {
      * and a short at or above. A stop exists to exit, so it fills unbounded
      * unless the call passes `slippageBps`; the intent's own default does not
      * apply. A nonzero bound keeps a stop that gaps past it from filling
-     * (#741) until the price recovers.
+     * (error 741) until the price recovers.
      */
     stopLoss(args: {
         /** Crossing price, 18-dec. Must be positive. */
@@ -246,7 +287,7 @@ export class OrderIntent {
         slippageBps?: bigint;
     }): OrderParams {
         return stopLossParams({
-            ...this.base(),
+            ...this.triggerBase(),
             triggerPrice: args.triggerPrice,
             notional: args.notional,
             priceBound: this.bound(
@@ -353,7 +394,7 @@ export function marketContext(
  * you will sign, e.g. from `OrderIntent`) to `position` at `price`. Runs
  * the exact fill engine, so what you preview is what the chain would do.
  * This catches what creation does not: the chain accepts orders that can
- * never fill (a decrease that would break the margin gate, #713).
+ * never fill (a decrease that would break the margin gate, error 713).
  *
  * @param price The fill price. A bare bigint is published at the quote
  *   time, but never behind the position's last fill. A market's terminal
