@@ -5,10 +5,11 @@ import {
     zenexErrorFromCode,
     parseContractErrorCode,
 } from './errors.js';
+import type { ZenexErrorSource } from './errors.js';
 
 export { ZenexError, ZenexErrorCode, zenexErrorFromCode } from './errors.js';
 
-/** Any host error in an RPC error string, e.g. `Error(Auth, InvalidAction)`. */
+/** The first host error in an RPC error string, e.g. `Error(Auth, InvalidAction)`: the one that ended the invocation. */
 const HOST_ERROR_PATTERN = /Error\((\w+), ([^)]*)\)/;
 /** The recording-mode diagnostic for a `require_auth` below the root invocation. */
 const NON_ROOT_AUTH = 'not tied to the root contract invocation';
@@ -24,22 +25,33 @@ const MAX_DETAIL = 200;
  * with a message that names what failed: the host error of a failed
  * simulation, such as `Error(Auth, InvalidAction)`, or the operation
  * result of a failed transaction.
+ *
+ * A failed simulation is read by the rule `parseContractErrorCode` states:
+ * the host error that ended the invocation decides, and a contract error
+ * the invocation survived, listed only in the event log, is not reported.
+ *
+ * @param source Which contract raised a contract code in 2-13, the range
+ *   the token and the price verifier share: `'token'` when the call moved
+ *   tokens, `'verifier'` when it verified a price report. Without it such a
+ *   code resolves to an `ambiguous` error that states both meanings. See
+ *   `zenexErrorFromCode`.
  */
 export function parseError(
     errorResponse:
         | rpc.Api.GetFailedTransactionResponse
         | rpc.Api.SendTransactionResponse
-        | rpc.Api.SimulateTransactionErrorResponse
+        | rpc.Api.SimulateTransactionErrorResponse,
+    source?: ZenexErrorSource,
 ): ZenexError {
     try {
-        return decodeErrorResponse(errorResponse);
+        return decodeErrorResponse(errorResponse, source);
     } catch {
         return new ZenexError(ZenexErrorCode.UnknownError);
     }
 }
 
-function resolve(code: number): ZenexError | undefined {
-    const resolved = zenexErrorFromCode(code);
+function resolve(code: number, source?: ZenexErrorSource): ZenexError | undefined {
+    const resolved = zenexErrorFromCode(code, source);
     return resolved.code === ZenexErrorCode.UnknownError ? undefined : resolved;
 }
 
@@ -49,7 +61,10 @@ function unknown(detail: string): ZenexError {
     return new ZenexError(ZenexErrorCode.UnknownError, trimmed);
 }
 
-function decodeErrorResponse(errorResponse: unknown): ZenexError {
+function decodeErrorResponse(
+    errorResponse: unknown,
+    source: ZenexErrorSource | undefined,
+): ZenexError {
     if (typeof errorResponse !== 'object' || errorResponse === null) {
         return new ZenexError(ZenexErrorCode.UnknownError);
     }
@@ -61,7 +76,7 @@ function decodeErrorResponse(errorResponse: unknown): ZenexError {
 
     // Simulation Error
     if (typeof response.error === 'string') {
-        return fromSimulationError(response.error);
+        return fromSimulationError(response.error, source);
     }
     // Send Transaction Error
     if (response.errorResult) {
@@ -74,9 +89,12 @@ function decodeErrorResponse(errorResponse: unknown): ZenexError {
     return new ZenexError(ZenexErrorCode.UnknownError);
 }
 
-function fromSimulationError(raw: string): ZenexError {
+function fromSimulationError(
+    raw: string,
+    source: ZenexErrorSource | undefined,
+): ZenexError {
     const code = parseContractErrorCode(raw);
-    const resolved = code === undefined ? undefined : resolve(code);
+    const resolved = code === undefined ? undefined : resolve(code, source);
     if (resolved) return resolved;
 
     const host = HOST_ERROR_PATTERN.exec(raw);

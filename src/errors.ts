@@ -3,7 +3,15 @@
  * transaction codes, the shared, token, vault, market, oracle,
  * strategy-vault, governance, treasury, ownable/role-transfer,
  * smart-account, session-policy, fee-abstraction, fee-forwarder and
- * referral domains, plus the SDK-side sentinels (negative, never on chain).
+ * referral domains, the price verifier's codes 14-18, plus the SDK-side
+ * sentinels (negative, never on chain).
+ *
+ * No two members share a value. One range still has two meanings on chain:
+ * codes 2-13 are raised both by the Stellar Asset Contract and by the
+ * Chainlink Data Streams verifier the oracle calls. The members below name
+ * the token meaning; {@link VerifierErrorCode} names the verifier's. Comparing
+ * `error.code` alone cannot tell the two apart in that range: read
+ * `error.ambiguous` and `error.source`, and see `zenexErrorFromCode`.
  *
  * A contract code takes the contract's variant name. The Stellar Asset
  * Contract codes, the market codes and the OpenZeppelin token, vault-token,
@@ -72,7 +80,9 @@ export enum ZenexErrorCode {
     InvokeHostFunctionMalformed = -1,
 
     // Common Errors: the Stellar Asset Contract codes (1-13). Governance also
-    // defines code 1 (`Unauthorized`), but no entry point raises it.
+    // defines code 1 (`Unauthorized`), but no entry point raises it. Codes
+    // 2-13 are also price verifier codes (`VerifierErrorCode`): a bare code in
+    // that range is ambiguous until a source hint resolves it.
     /** Code 1: reserved by the Stellar Asset Contract, and governance's never-raised `Unauthorized`. */
     InternalError = 1,
     /** The token does not support this operation. */
@@ -99,6 +109,21 @@ export enum ZenexErrorCode {
     OverflowError = 12,
     /** The account has no trustline for the asset. */
     TrustlineMissingError = 13,
+
+    // Price verifier (14-18): the part of the Chainlink Data Streams
+    // verifier's `ContractError` that no other contract reuses. Its codes
+    // 2-13 share their numbers with the token codes above and are named in
+    // `VerifierErrorCode`.
+    /** The report does not carry the number of signatures the verifier's config requires. */
+    VerifierIncorrectSignatureCount = 14,
+    /** The verifier has no proposed owner to accept. An admin path, not a report reject. */
+    VerifierNoProposedOwner = 15,
+    /** The signed report is not in the format the verifier decodes. */
+    VerifierInvalidReportFormat = 16,
+    /** A report signature did not recover to a public key. */
+    VerifierSignatureRecoveryFailed = 17,
+    /** The verifier's proposed owner is not valid. An admin path, not a report reject. */
+    VerifierInvalidProposedOwner = 18,
 
     // FungibleTokenError (100-114): the vault share token.
     /** The sender's balance is too small. */
@@ -398,6 +423,89 @@ export enum ZenexErrorCode {
     ReferralSelfReferral = 7001,
 }
 
+/**
+ * The Chainlink Data Streams verifier's own error codes (its `ContractError`
+ * enum, 2-18), by the verifier's variant names. The Zenex oracle calls the
+ * verifier with a plain cross-contract call, so a report the verifier
+ * rejects fails the whole invocation with one of these codes, unchanged.
+ *
+ * Codes 2-13 share their numbers with the Stellar Asset Contract codes in
+ * {@link ZenexErrorCode}. Decode with the `'verifier'` source hint
+ * (`zenexErrorFromCode(code, 'verifier')`) when the failing call verified a
+ * price report.
+ */
+export enum VerifierErrorCode {
+    /** The verifier has no configuration yet. */
+    NotInitialized = 2,
+    /** A configuration names a zero address. */
+    ZeroAddress = 3,
+    /** A configuration's fault tolerance is not positive. */
+    FaultToleranceMustBePositive = 4,
+    /** A configuration names more signers than the verifier allows. */
+    ExcessSigners = 5,
+    /** A configuration names too few signers for its fault tolerance. */
+    InsufficientSigners = 6,
+    /** Signers or signatures are not unique. */
+    NonUniqueSignatures = 7,
+    /** A config digest is empty. */
+    DigestEmpty = 8,
+    /** The config digest is not set on the verifier. */
+    DigestNotSet = 9,
+    /** The config digest the report was signed under is deactivated. */
+    DigestInactive = 10,
+    /** The config digest is already set. */
+    ConfigDigestAlreadySet = 11,
+    /** The report's signatures do not verify against the config's signers. */
+    BadVerification = 12,
+    /** The report's signature components differ in count. */
+    MismatchedSignatures = 13,
+    /** The report does not carry the number of signatures the config requires. */
+    IncorrectSignatureCount = 14,
+    /** There is no proposed owner to accept. */
+    NoProposedOwner = 15,
+    /** The signed report is not in the format the verifier decodes. */
+    InvalidReportFormat = 16,
+    /** A report signature did not recover to a public key. */
+    SignatureRecoveryFailed = 17,
+    /** The proposed owner is not valid. */
+    InvalidProposedOwner = 18,
+}
+
+/**
+ * Which contract raised a code in the range two contracts share (2-13):
+ * `'token'` for the Stellar Asset Contract, `'verifier'` for the Chainlink
+ * Data Streams verifier behind the oracle.
+ */
+export type ZenexErrorSource = 'token' | 'verifier';
+
+/** First and last code that both the token and the price verifier define. */
+const SHARED_FIRST = 2;
+const SHARED_LAST = 13;
+
+function isShared(code: number): boolean {
+    return Number.isInteger(code) && code >= SHARED_FIRST && code <= SHARED_LAST;
+}
+
+const verifierMessages: Record<number, string> = {
+    [2]: 'Price verifier is not initialized',
+    [3]: 'Price verifier configuration names a zero address',
+    [4]: 'Price verifier configuration needs a positive fault tolerance',
+    [5]: 'Price verifier configuration names too many signers',
+    [6]: 'Price verifier configuration names too few signers for its fault tolerance',
+    [7]: 'Price verifier signers or signatures are not unique',
+    [8]: 'Price verifier config digest is empty',
+    [9]: 'Price report names a config digest the verifier has not set',
+    [10]: 'Price report was signed under a deactivated verifier config',
+    [11]: 'Price verifier config digest is already set',
+    [12]: 'Price report signatures failed verification',
+    [13]: 'Price report signature components differ in count',
+    [14]: 'Price report carries the wrong number of signatures',
+    [15]: 'Price verifier has no proposed owner',
+    [16]: 'Price report is not in the format the verifier decodes',
+    [17]: 'Price report signature recovery failed',
+    [18]: 'Price verifier proposed owner is not valid',
+};
+
 const errorMessages: Record<number, string> = {
     [-1000]: 'Unknown contract error',
     [-1001]: 'SDK rejected the input before contract math ran',
@@ -442,6 +550,13 @@ const errorMessages: Record<number, string> = {
     [11]: 'Balance is deauthorized',
     [12]: 'Arithmetic overflow',
     [13]: 'Required trustline is missing',
+
+    // Price verifier (the codes no other contract reuses)
+    [14]: verifierMessages[14],
+    [15]: verifierMessages[15],
+    [16]: verifierMessages[16],
+    [17]: verifierMessages[17],
+    [18]: verifierMessages[18],
 
     // FungibleToken
     [100]: 'Insufficient token balance',
@@ -591,54 +706,121 @@ const errorMessages: Record<number, string> = {
     [7001]: 'Referral names the caller as its own referrer',
 };
 
+/** The `ZenexErrorCode` member name of a code, or `undefined` for a number outside the enum. */
+function memberName(code: number): string | undefined {
+    const name = (ZenexErrorCode as Record<number, string | undefined>)[code];
+    return typeof name === 'string' ? name : undefined;
+}
+
+function describeCode(
+    code: number,
+    source: ZenexErrorSource | undefined,
+): { codeName: string; message: string } {
+    if (!isShared(code)) {
+        return {
+            codeName: memberName(code) ?? `Unknown(${code})`,
+            message: errorMessages[code] ?? `Contract error ${code}`,
+        };
+    }
+    const tokenName = memberName(code) as string;
+    const verifierName = `Verifier${VerifierErrorCode[code]}`;
+    if (source === 'token') {
+        return { codeName: tokenName, message: errorMessages[code] };
+    }
+    if (source === 'verifier') {
+        return { codeName: verifierName, message: verifierMessages[code] };
+    }
+    return {
+        codeName: `${tokenName}|${verifierName}`,
+        message:
+            `Ambiguous contract error ${code}: "${errorMessages[code]}" if a token raised it (${tokenName}), `
+            + `"${verifierMessages[code]}" if the price verifier raised it (${verifierName}). `
+            + 'Decode with a source hint to tell them apart.',
+    };
+}
+
 /**
  * The one error shape the SDK reports, from a failed contract call, an RPC
  * response, or the SDK's own quote/preview gates. `code` carries the
- * numeric code. The message defaults to the code's entry in
- * `errorMessages`, or a fallback string when the code is not recognized.
+ * numeric code. The message defaults to the code's catalog entry, or a
+ * fallback string when the code is not recognized.
+ *
+ * Codes 2-13 mean one thing from a token and another from the price
+ * verifier. Without a `source` such an error is `ambiguous`: its `codeName`
+ * and default message state both meanings, and `code` compares equal to the
+ * token member of `ZenexErrorCode` whichever contract raised it.
+ *
+ * The ESM and CommonJS builds each define this class, so `instanceof` fails
+ * for an error that crosses from one build to the other. Compare
+ * `error.name === 'ZenexError'` or `error.code` instead.
  */
 export class ZenexError extends Error {
     /** The numeric code: a contract error code, a transaction or host code, or an SDK sentinel. */
-    public code: ZenexErrorCode;
+    public readonly code: ZenexErrorCode;
+    /**
+     * The contract a code in the shared range (2-13) was decoded for. Always
+     * `undefined` outside that range, and inside it when no hint was given.
+     */
+    public readonly source: ZenexErrorSource | undefined;
+    /** Whether `code` has two meanings and no `source` chose one. Only codes 2-13 without a hint. */
+    public readonly ambiguous: boolean;
+    /**
+     * What the code is called: the `ZenexErrorCode` member name, the
+     * verifier's variant with a `Verifier` prefix (`VerifierBadVerification`),
+     * or both joined by `|` for an ambiguous code
+     * (`OverflowError|VerifierBadVerification`).
+     */
+    public readonly codeName: string;
 
-    constructor(code: ZenexErrorCode, message?: string) {
-        super(message ?? errorMessages[code] ?? `Contract error ${code}`);
+    constructor(
+        code: ZenexErrorCode,
+        message?: string,
+        source?: ZenexErrorSource,
+    ) {
+        const shared = isShared(code);
+        const resolved =
+            shared && (source === 'token' || source === 'verifier')
+                ? source
+                : undefined;
+        const described = describeCode(code, resolved);
+        super(message ?? described.message);
+        this.name = 'ZenexError';
         this.code = code;
+        this.source = resolved;
+        this.ambiguous = shared && resolved === undefined;
+        this.codeName = described.codeName;
     }
 }
 
 /**
  * Resolve a raw on-chain error code to a ZenexError.
  *
- * The per-contract code namespaces are disjoint (Stellar Asset Contract
- * 1-13, fungible token 100-114, vault token 400-410, shared admin 600,
- * market 700-772, oracle 780-793, strategy-vault 800-803, governance
- * 810-812, treasury 900, ownable 2100-2102, role transfer 2200-2203, smart
- * account 3000-3016, session policy 4002-4007, fee-abstraction 5000-5006,
- * fee forwarder 6001-6002, referral 7001), so every code resolves without a
- * hint. A code outside them resolves to `UnknownError`.
+ * Every contract owns its own code range (fungible token 100-114, vault
+ * token 400-410, shared admin 600, market 700-772, oracle 780-793,
+ * strategy-vault 800-803, governance 810-812, treasury 900, ownable
+ * 2100-2102, role transfer 2200-2203, smart account 3000-3016, session
+ * policy 4002-4007, fee-abstraction 5000-5006, fee forwarder 6001-6002,
+ * referral 7001), with one exception: the Stellar Asset Contract (1-13) and
+ * the Chainlink Data Streams verifier (2-18) overlap on 2-13. A failed token
+ * transfer and a rejected price report can therefore carry the same number.
+ *
+ * @param code The raw contract error code.
+ * @param source Which of the two raised a code in 2-13: `'token'` when the
+ *   failing call moved tokens, `'verifier'` when it verified a price report.
+ *   Without it a code in that range resolves to an `ambiguous` error whose
+ *   `codeName` and message state both meanings. Ignored outside 2-13, where
+ *   every code has one meaning.
+ * @returns The error for the code, or `UnknownError` for a code no contract
+ *   defines.
  */
-export function zenexErrorFromCode(code: number): ZenexError {
+export function zenexErrorFromCode(
+    code: number,
+    source?: ZenexErrorSource,
+): ZenexError {
     if (code in ZenexErrorCode) {
-        return new ZenexError(code as ZenexErrorCode);
+        return new ZenexError(code as ZenexErrorCode, undefined, source);
     }
     return new ZenexError(ZenexErrorCode.UnknownError);
-}
-
-/**
- * Resolve a quote/preview gate to a `ZenexError`: the canonical message for
- * a contract code, the gate's own `reason` for an SDK sentinel. A sentinel
- * reason is built in place and carries more context than the generic
- * sentinel message.
- */
-export function zenexErrorFromGate(code: number, reason: string): ZenexError {
-    if (
-        code === ZenexErrorCode.QuoteInvalidInput ||
-        code === ZenexErrorCode.QuoteOverflow
-    ) {
-        return new ZenexError(code, reason);
-    }
-    return zenexErrorFromCode(code);
 }
 
 // Soroban contract error codes are u32; anything larger is not a real code.
@@ -647,16 +829,61 @@ const MAXIMUM_ERROR_CODE = 4_294_967_295;
 // Strictly the host's `Error(Contract, #N)` shape. Bare `#N` fragments in
 // diagnostics are NOT trusted as contract codes.
 const CONTRACT_ERROR_PATTERN = /Error\(Contract, #(\d{1,10})\)/;
+// Any host error, such as `Error(Budget, ExceededLimit)`.
+const ANY_HOST_ERROR_PATTERN = /Error\((\w+), [^)]*\)/;
+// The diagnostic section of a simulation error: `Event log (newest first):`.
+// Matched anywhere, so text whose newlines were escaped still splits.
+const EVENT_LOG_PATTERN = /\bEvent log\b/;
+// The host's diagnostic for an account contract whose `__check_auth` failed.
+// The event carries the account's own error after this text.
+const ACCOUNT_AUTH_FAILURE = 'failed account authentication';
 
-/**
- * The contract error code inside a raw RPC simulation or diagnostic string,
- * or `undefined` when the strict `Error(Contract, #N)` shape is absent or the
- * number is not a valid u32. Feed the result to `zenexErrorFromCode`.
- */
-export function parseContractErrorCode(rpcError: string): number | undefined {
-    const match = CONTRACT_ERROR_PATTERN.exec(rpcError);
+function contractCode(text: string): number | undefined {
+    const match = CONTRACT_ERROR_PATTERN.exec(text);
     if (match?.[1] === undefined) return undefined;
     const code = Number(match[1]);
     return Number.isSafeInteger(code) && code <= MAXIMUM_ERROR_CODE ? code : undefined;
 }
 
+/**
+ * The contract error code that failed the invocation described by a raw RPC
+ * simulation or diagnostic string, or `undefined` when there is none. Feed
+ * the result to `zenexErrorFromCode`.
+ *
+ * A simulation error is the host error that ended the invocation, followed
+ * by an event log: `HostError: Error(Contract, #713)\n\nEvent log (newest
+ * first): ...`. The log also lists errors the invocation survived, such as a
+ * failed `try_` call a contract caught, so it is not searched blindly:
+ *
+ * 1. The leading host error, the first `Error(<type>, <code>)` before the
+ *    event log, decides. `Error(Contract, #N)` returns `N`.
+ * 2. A leading `Error(Auth, ...)` falls back to the event log. The host
+ *    reports an account contract's failed `__check_auth` as
+ *    `Error(Auth, InvalidAction)` and keeps the account's own code (a smart
+ *    account or session policy reject) only in the log. The code on the
+ *    `failed account authentication` event wins, else the newest contract
+ *    error in the log.
+ * 3. Any other leading host error (`Budget`, `Storage`, `WasmVm`, ...) is
+ *    not a contract failure: `undefined`, whatever the log holds.
+ * 4. Text with no leading host error, such as a single diagnostic line, is
+ *    searched as a whole.
+ *
+ * Only the strict `Error(Contract, #N)` shape with a u32 code counts.
+ */
+export function parseContractErrorCode(rpcError: string): number | undefined {
+    const log = EVENT_LOG_PATTERN.exec(rpcError);
+    const header = log === null ? rpcError : rpcError.slice(0, log.index);
+    const leading = ANY_HOST_ERROR_PATTERN.exec(header);
+    if (leading === null) return contractCode(rpcError);
+    if (leading[1] === 'Contract') return contractCode(leading[0]);
+    if (leading[1] !== 'Auth' || log === null) return undefined;
+
+    const diagnostics = rpcError.slice(log.index);
+    const authEvent = diagnostics
+        .split('\n')
+        .find((line) => line.includes(ACCOUNT_AUTH_FAILURE));
+    return (
+        (authEvent === undefined ? undefined : contractCode(authEvent))
+        ?? contractCode(diagnostics)
+    );
+}

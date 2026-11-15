@@ -1,5 +1,6 @@
 import { Status, VaultOrderKind } from '../contracts/market/types.js';
-import { ZenexError, ZenexErrorCode, zenexErrorFromGate } from '../errors.js';
+import { ZenexError, ZenexErrorCode } from '../errors.js';
+import { zenexErrorFromGate } from './internal/gate.js';
 import { MarketContract } from '../contracts/market/contract.js';
 import {
     BPS_DENOMINATOR,

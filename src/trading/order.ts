@@ -1,5 +1,6 @@
 import type { OrderParams } from '../contracts/router/types.js';
-import { ZenexError, zenexErrorFromGate } from '../errors.js';
+import type { ZenexError } from '../errors.js';
+import { zenexErrorFromGate } from './internal/gate.js';
 import { OrderKind } from '../contracts/market/types.js';
 import { formatPrice, formatToken, formatTokenFloor } from '../float.js';
 import type { Market } from './market.js';

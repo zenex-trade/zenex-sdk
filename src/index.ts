@@ -269,7 +269,8 @@ export {
     parseError,
     parseResult,
 } from './response_parser.js';
-export { parseContractErrorCode } from './errors.js';
+export { parseContractErrorCode, VerifierErrorCode } from './errors.js';
+export type { ZenexErrorSource } from './errors.js';
 
 // =============================================================================
 // Ledger Keys (direct storage reads)

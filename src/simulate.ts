@@ -8,6 +8,7 @@ import {
 } from '@stellar/stellar-sdk';
 import { Network } from './index.js';
 import { ZenexError, ZenexErrorCode } from './errors.js';
+import type { ZenexErrorSource } from './errors.js';
 import { parseError } from './response_parser.js';
 
 // Dummy account for simulations (doesn't need to exist on chain)
@@ -27,6 +28,9 @@ const SIMULATION_SEQUENCE = '123';
  *   whose `require_auth` sits below the root invocation, such as a router
  *   batch that creates an order, fails with `Error(Auth, InvalidAction)`.
  *   Pass `{ authMode: 'record_allow_nonroot' }` for such a call.
+ *   `errorSource` says which contract a failure code in 2-13 came from,
+ *   `'token'` or `'verifier'` (see `zenexErrorFromCode`); without it such a
+ *   code throws an `ambiguous` error that states both meanings.
  * @returns The parsed result and the ledger sequence the simulation ran
  *   against.
  * @throws {ZenexError} `InvokeHostFunctionEntryArchived` (-4) when the
@@ -39,7 +43,10 @@ export async function simulateAndParse<T>(
     network: Network,
     operation: string,
     parser: (result: string) => T,
-    options?: { authMode?: rpc.Api.SimulationAuthMode },
+    options?: {
+        authMode?: rpc.Api.SimulationAuthMode;
+        errorSource?: ZenexErrorSource;
+    },
 ): Promise<{ result: T; latestLedger: number }> {
     const stellarRpc = new rpc.Server(network.rpc, network.opts);
     const transaction = new TransactionBuilder(
@@ -65,10 +72,11 @@ export async function simulateAndParse<T>(
         );
     }
     if (rpc.Api.isSimulationError(simulation)) {
-        const decoded = parseError(simulation);
+        const decoded = parseError(simulation, options?.errorSource);
         const error = new ZenexError(
             decoded.code,
             `Simulation failed: ${decoded.message}`,
+            decoded.source,
         );
         error.cause = simulation.error;
         throw error;

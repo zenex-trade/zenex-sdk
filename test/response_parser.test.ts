@@ -18,22 +18,59 @@ function simulationError(code: number): rpc.Api.SimulateTransactionErrorResponse
     } as unknown as rpc.Api.SimulateTransactionErrorResponse;
 }
 
-describe('parseError: collision-hint machinery is gone', () => {
-    it('parseError takes a single parameter (no contractType hint)', () => {
-        expect(parseError.length).toBe(1);
-    });
-
-    it('a stray second argument is inert (same resolution with and without it)', () => {
-        const parseWithExtraArgument = parseError as unknown as (
-            response: unknown,
-            legacyHint?: string
-        ) => ZenexError;
-        expect(parseWithExtraArgument(simulationError(770), 'governance').code).toBe(
+describe('parseError: the source hint decides only the shared range', () => {
+    it('a hint is inert outside codes 2-13', () => {
+        expect(parseError(simulationError(770), 'verifier').code).toBe(
             ZenexErrorCode.AdlNotTriggered
         );
-        expect(parseWithExtraArgument(simulationError(810), 'market').code).toBe(
+        expect(parseError(simulationError(810), 'token').code).toBe(
             ZenexErrorCode.GovNotQueued
         );
+        expect(parseError(simulationError(770), 'verifier').source).toBeUndefined();
+    });
+
+    it('an unknown hint value resolves as no hint', () => {
+        const parseWithAnyHint = parseError as unknown as (
+            response: unknown,
+            hint?: string
+        ) => ZenexError;
+        expect(parseWithAnyHint(simulationError(770), 'governance').code).toBe(
+            ZenexErrorCode.AdlNotTriggered
+        );
+        expect(parseWithAnyHint(simulationError(12), 'governance').ambiguous).toBe(true);
+    });
+
+    it('a rejected price report reads as the verifier error with the hint', () => {
+        const error = parseError(simulationError(12), 'verifier');
+        expect(error.code).toBe(12);
+        expect(error.source).toBe('verifier');
+        expect(error.ambiguous).toBe(false);
+        expect(error.codeName).toBe('VerifierBadVerification');
+        expect(error.message).toBe('Price report signatures failed verification');
+    });
+
+    it('the same code reads as the token error with the token hint', () => {
+        const error = parseError(simulationError(10), 'token');
+        expect(error.code).toBe(ZenexErrorCode.BalanceError);
+        expect(error.source).toBe('token');
+        expect(error.codeName).toBe('BalanceError');
+        expect(error.message).toBe('Insufficient token balance');
+    });
+
+    it('without a hint a shared code states both meanings', () => {
+        const error = parseError(simulationError(10));
+        expect(error.code).toBe(10);
+        expect(error.ambiguous).toBe(true);
+        expect(error.source).toBeUndefined();
+        expect(error.codeName).toBe('BalanceError|VerifierDigestInactive');
+        expect(error.message).toContain('Insufficient token balance');
+        expect(error.message).toContain('deactivated verifier config');
+    });
+
+    it('verifier codes 14-18 resolve without a hint', () => {
+        const error = parseError(simulationError(14));
+        expect(error.code).toBe(ZenexErrorCode.VerifierIncorrectSignatureCount);
+        expect(error.ambiguous).toBe(false);
     });
 });
 

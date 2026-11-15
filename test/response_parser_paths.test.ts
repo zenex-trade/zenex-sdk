@@ -60,6 +60,46 @@ describe('parseError: simulation responses', () => {
     });
 });
 
+describe('parseError: the host error that ended the simulation decides', () => {
+    const LOG = '\n\nEvent log (newest first):\n';
+
+    it('reports the leading contract error in the normal case', () => {
+        const error = parseError(simulationError(
+            'HostError: Error(Contract, #713)' + LOG
+            + '   0: [Diagnostic Event] contract:CA, topics:[error, Error(Contract, #713)], data:"escalating error to panic"\n'
+            + '   1: [Diagnostic Event] contract:CA, topics:[error, Error(Contract, #713)], data:["contract call failed", create_order, []]',
+        ));
+        expect(error.code).toBe(ZenexErrorCode.InsufficientMargin);
+    });
+
+    it('reports a top-level budget error, not the contract error a contract caught', () => {
+        const error = parseError(simulationError(
+            'HostError: Error(Budget, ExceededLimit)' + LOG
+            + '   0: [Diagnostic Event] topics:[error, Error(Budget, ExceededLimit)], data:["operation instructions exceeds amount specified", 100000000]\n'
+            + '   1: [Diagnostic Event] contract:CB, topics:[error, Error(Contract, #741)], data:["contract try_call failed", execute_order, []]',
+        ));
+        expect(error.code).toBe(ZenexErrorCode.UnknownError);
+        expect(error.message).toBe('Host error Error(Budget, ExceededLimit)');
+    });
+
+    it('still decodes an account contract reject behind a leading auth error', () => {
+        const error = parseError(simulationError(
+            'HostError: Error(Auth, InvalidAction)' + LOG
+            + '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", CACCOUNT, Error(Contract, #4004)]',
+        ));
+        expect(error.code).toBe(ZenexErrorCode.SessionTransferNotAllowed);
+    });
+
+    it('names a leading auth error that hides no contract code', () => {
+        const error = parseError(simulationError(
+            'HostError: Error(Auth, InvalidAction)' + LOG
+            + '   0: [Diagnostic Event] topics:[error, Error(Auth, InvalidAction)], data:"Unauthorized function call for address"',
+        ));
+        expect(error.code).toBe(ZenexErrorCode.UnknownError);
+        expect(error.message).toBe('Host error Error(Auth, InvalidAction)');
+    });
+});
+
 describe('parseError: send-transaction responses', () => {
     it('maps a trapped host function through errorResult', () => {
         // InvokeHostFunctionResultCode: trapped = -2 = InvokeHostFunctionTrapped
