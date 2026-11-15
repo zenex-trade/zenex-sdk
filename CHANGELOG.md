@@ -1,16 +1,19 @@
 # Changelog
 
-## 3.0.0
+## 1.0.0
 
-The first release of the 3.x line. Versions 1.x and 2.x were unpublished
-from npm and are not an upgrade path.
+The first release of `@zenex-trade/zenex-sdk`. It continues
+`@zenith-protocols/zenex-sdk` 3.0.0, which was installed from git and never
+published to npm. The code is the same; only the package name and the
+version change.
 
 ### Contracts
 
-- Core contracts at zenex-contracts `201a2f0` (market, strategy vault,
-  factory, oracle, treasury, governance): release `644a4c4` plus the
-  borrowing NAV change (zenex-contracts #223). The committed specs are
-  generated from that build's WASMs.
+- Core contracts (market, strategy vault, factory, oracle, treasury,
+  governance) at the source of
+  [zenex-contracts](https://github.com/zenex-trade/zenex-contracts) v1.0.0,
+  which includes the borrowing NAV change. The committed specs are generated
+  from a build of that source.
 - Market router and fee forwarder from zenex-util-contracts v0.0.2.
 
 ### Requirements
@@ -19,10 +22,10 @@ from npm and are not an upgrade path.
   API the SDK calls.
 - Node 22 or later.
 
-### Changes for consumers installing from git `main`
+### Changes for consumers of `@zenith-protocols/zenex-sdk` from git
 
 These are the changes since the code that `github:zenith-protocols/zenex-sdk-js#main`
-installs resolved to before this release.
+resolved to before October 2026.
 
 **Breaking**
 

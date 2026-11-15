@@ -1,6 +1,6 @@
 {
-    "name": "@zenith-protocols/zenex-sdk",
-    "version": "3.0.0",
+    "name": "@zenex-trade/zenex-sdk",
+    "version": "1.0.0",
     "type": "module",
     "description": "TypeScript SDK for the Zenex perpetuals DEX on Stellar (Soroban): contract bindings, ledger-state loaders and exact quotes",
     "author": "Robeart",
@@ -72,13 +72,13 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/zenith-protocols/zenex-sdk-js.git"
+        "url": "git+https://github.com/zenex-trade/zenex-sdk.git"
     },
     "license": "MIT",
     "bugs": {
-        "url": "https://github.com/zenith-protocols/zenex-sdk-js/issues"
+        "url": "https://github.com/zenex-trade/zenex-sdk/issues"
     },
-    "homepage": "https://github.com/zenith-protocols/zenex-sdk-js#readme",
+    "homepage": "https://github.com/zenex-trade/zenex-sdk#readme",
     "dependencies": {
         "buffer": "^6.0.3"
     },

@@ -46,8 +46,8 @@ const coreWasmDir = resolve(
 );
 const utilWasmDir = resolve(utilContractsRoot, 'target/wasm32v1-none/release');
 
-const CORE_HINT = 'Check out zenex-contracts main, whose `wasm/` holds the release '
-    + 'build, or point ZENEX_CONTRACTS_ROOT at it.';
+const CORE_HINT = 'Download the release WASMs of zenex-contracts and point '
+    + 'ZENEX_CONTRACTS_WASM_DIR at them, named as the crates are (strategy_vault.wasm).';
 const UTIL_HINT = 'Run `make build` in zenex-util-contracts at the released tag, '
     + 'or point ZENEX_UTIL_CONTRACTS_ROOT at it.';
 

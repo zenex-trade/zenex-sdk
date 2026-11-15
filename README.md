@@ -1,18 +1,19 @@
-# @zenith-protocols/zenex-sdk
+# @zenex-trade/zenex-sdk
 
 TypeScript SDK for the Zenex perpetuals DEX on Stellar (Soroban). It binds
 every deployed Zenex contract, loads market and user state straight from the
 ledger, and quotes orders with an exact engine that mirrors the on-chain math:
 a preview that says an order fills, fills on chain with the same numbers.
 
-3.0.0 binds the mainnet contracts: the core release (market, strategy vault,
-factory, oracle, treasury, governance) and the market router and fee
-forwarder from zenex-util-contracts v0.0.2.
+1.0.0 binds the mainnet contracts: the core release (market, strategy vault,
+factory, oracle, treasury, governance), which is
+[zenex-contracts](https://github.com/zenex-trade/zenex-contracts) v1.0.0, and
+the market router and fee forwarder from zenex-util-contracts v0.0.2.
 
 ## Install
 
 ```bash
-npm install @zenith-protocols/zenex-sdk @stellar/stellar-sdk@^16
+npm install @zenex-trade/zenex-sdk @stellar/stellar-sdk@^16
 ```
 
 - `@stellar/stellar-sdk` is a peer dependency, `>=16.0.0 <17.0.0`. Version
@@ -21,7 +22,7 @@ npm install @zenith-protocols/zenex-sdk @stellar/stellar-sdk@^16
 - Browsers need no Node polyfills: the SDK imports `Buffer` from the
   `buffer` package.
 - ESM and CommonJS, each with its own type declarations.
-  `@zenith-protocols/zenex-sdk/errors` is a standalone, import-free error
+  `@zenex-trade/zenex-sdk/errors` is a standalone, import-free error
   catalog.
 
 ## Conventions
@@ -44,7 +45,7 @@ npm install @zenith-protocols/zenex-sdk @stellar/stellar-sdk@^16
 
 ```ts
 import { Networks } from '@stellar/stellar-sdk';
-import { Market } from '@zenith-protocols/zenex-sdk';
+import { Market } from '@zenex-trade/zenex-sdk';
 
 const network = { rpc: RPC_URL, passphrase: Networks.PUBLIC };
 
@@ -79,7 +80,7 @@ the expiration comes from `market.ledger + ttlLedgers`, and the fill bound
 from `slippageBps`. `previewOrder` runs the exact engine over it.
 
 ```ts
-import { OrderIntent, previewOrder } from '@zenith-protocols/zenex-sdk';
+import { OrderIntent, previewOrder } from '@zenex-trade/zenex-sdk';
 
 const price = market.priceFromReport(report.bid, report.ask, report.publishTime);
 
@@ -117,7 +118,7 @@ There are three ways to put an order on chain.
 order once it is eligible.
 
 ```ts
-import { MarketContract } from '@zenith-protocols/zenex-sdk';
+import { MarketContract } from '@zenex-trade/zenex-sdk';
 
 const createOp = new MarketContract(order.market).createOrder(
     order.user, order.isLong, order.kind, order.notional, order.margin,
@@ -131,7 +132,7 @@ and fills it against a signed price report. The router has two variants:
 resting if the fill misses.
 
 ```ts
-import { MarketRouterContract, createOrderCall, simulateAndParse } from '@zenith-protocols/zenex-sdk';
+import { MarketRouterContract, createOrderCall, simulateAndParse } from '@zenex-trade/zenex-sdk';
 
 const router = new MarketRouterContract(ROUTER);
 const fillOp = router.createAndFill([createOrderCall(order)], USER, USER, priceReport);
@@ -155,7 +156,7 @@ reward to the user.
 submits it and takes a fee from the user in the same transaction.
 
 ```ts
-import { FeeForwarderContract, createOrderCall } from '@zenith-protocols/zenex-sdk';
+import { FeeForwarderContract, createOrderCall } from '@zenex-trade/zenex-sdk';
 
 const fee = {
     feeToken: TOKEN,
@@ -183,7 +184,7 @@ bind the fill.
 Deposits and redeems are orders that a keeper fills.
 
 ```ts
-import { VaultOrderIntent, VaultOrderKind } from '@zenith-protocols/zenex-sdk';
+import { VaultOrderIntent, VaultOrderKind } from '@zenex-trade/zenex-sdk';
 
 // 100 USDC in, at most 0.5% below the expected share output.
 const deposit = VaultOrderIntent.create(market, USER, VaultOrderKind.Deposit, 100_0000000n, 50n, price);
@@ -252,7 +253,7 @@ The catalog also covers host and transaction codes and a few SDK-side
 sentinels (negative codes).
 
 ```ts
-import { parseError, ZenexErrorCode } from '@zenith-protocols/zenex-sdk';
+import { parseError, ZenexErrorCode } from '@zenex-trade/zenex-sdk';
 
 const sent = await server.sendTransaction(tx);
 if (sent.status === 'ERROR') {
@@ -301,8 +302,9 @@ custom reads.
 
 ## Versioning
 
-3.0.0 is the first release of this line. Earlier 1.x and 2.x releases were
-unpublished and are not an upgrade path. Breaking changes bump the major
+1.0.0 is the first release of `@zenex-trade/zenex-sdk`. The package continues
+`@zenith-protocols/zenex-sdk`, which was installed from git and is not an
+upgrade path on npm. Breaking changes bump the major
 version. [CHANGELOG.md](./CHANGELOG.md) lists each release and the contract
 releases it binds.
 
