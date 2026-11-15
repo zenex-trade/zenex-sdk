@@ -64,12 +64,17 @@ export const NO_EXPIRY_LEDGER = 0xffff_ffff;
  * `ttlLedgers`, 60 by default, and trigger orders (`openLimit`, `openStop`,
  * `takeProfit`, `stopLoss`) never expire unless `triggerTtlLedgers` is set.
  * An expired order no longer fills and its escrow stays in the market until
- * the order is cancelled.
+ * the order is cancelled. An expiration never exceeds
+ * {@link NO_EXPIRY_LEDGER}, the largest ledger the contract can take.
  * The methods also encode the contract's conventions that `OrderKind` alone
  * does not express: the `FULL_CLOSE` sentinel, margin-only orders as
  * `notional: 0n`, and the trigger-direction rules for entries and TP/SL.
  */
 export class OrderIntent {
+    /**
+     * @throws {RangeError} if `ttlLedgers`, or a `triggerTtlLedgers` that is
+     *   given, is not a finite, non-negative integer.
+     */
     constructor(
         /** Market snapshot expirations and price bounds derive from. */
         public market: Market,
@@ -89,8 +94,20 @@ export class OrderIntent {
          * does not apply to these kinds.
          */
         public triggerTtlLedgers?: number,
-    ) {}
+    ) {
+        // A lifetime that is not a whole number of ledgers would reach the
+        // signer as an `expiration` no `u32` encodes.
+        requireLifetime('ttlLedgers', ttlLedgers);
+        if (triggerTtlLedgers !== undefined) {
+            requireLifetime('triggerTtlLedgers', triggerTtlLedgers);
+        }
+    }
 
+    /**
+     * The fields every order shares. `expiration` is the market's ledger
+     * plus the lifetime, held at {@link NO_EXPIRY_LEDGER}: the contract
+     * takes a `u32`, and a larger number would not encode.
+     */
     private base(ttlLedgers: number = this.ttlLedgers): {
         market: string;
         user: string;
@@ -101,7 +118,7 @@ export class OrderIntent {
             market: this.market.id,
             user: this.user,
             isLong: this.isLong,
-            expiration: this.market.ledger + ttlLedgers,
+            expiration: Math.min(this.market.ledger + ttlLedgers, NO_EXPIRY_LEDGER),
         };
     }
 
@@ -110,8 +127,7 @@ export class OrderIntent {
         if (this.triggerTtlLedgers === undefined) {
             return { ...this.base(), expiration: NO_EXPIRY_LEDGER };
         }
-        const base = this.base(this.triggerTtlLedgers);
-        return { ...base, expiration: Math.min(base.expiration, NO_EXPIRY_LEDGER) };
+        return this.base(this.triggerTtlLedgers);
     }
 
     /** @throws {RangeError} when a slippage bound is configured but no price was given to measure it against. */
@@ -289,6 +305,15 @@ export class OrderIntent {
                 args.slippageBps ?? 0n,
             ),
         });
+    }
+}
+
+/** @throws {RangeError} unless `ledgers` is a finite, non-negative integer. */
+function requireLifetime(name: 'ttlLedgers' | 'triggerTtlLedgers', ledgers: number): void {
+    if (!Number.isInteger(ledgers) || ledgers < 0) {
+        throw new RangeError(
+            `${name} must be a finite, non-negative integer of ledgers, got ${String(ledgers)}`,
+        );
     }
 }
 
@@ -568,6 +593,16 @@ export function maxMarginForBalance(
         const fees = quoteTradeFees(market.data, market.config, isLong, notional, tokens);
         return fees.base + fees.impact;
     };
+    // Whether the order of this size and the whole budget as its margin
+    // fits: the position keeps the budget less the fees, and that margin
+    // carries the size at the leverage and at the initial-margin floor,
+    // `ceil(initMargin * notional) <= margin`, the gate the fill measures.
+    const fits = (notional: bigint): boolean => {
+        const margin = budget - tradeFees(notional);
+        if (margin < 0n) return false;
+        if (notional * LEVERAGE_SCALE > margin * leverageScaled) return false;
+        return initMargin <= 0n || notional * initMargin <= margin * SCALAR_18;
+    };
 
     // No size above what the whole budget carries fits, since the position
     // margin never exceeds the budget.
@@ -592,13 +627,3 @@ export function maxMarginForBalance(
         positionMargin: budget - tradeFees(low),
     };
 }
-    // Whether the order of this size and the whole budget as its margin
-    // fits: the position keeps the budget less the fees, and that margin
-    // carries the size at the leverage and at the initial-margin floor,
-    // `ceil(initMargin * notional) <= margin`, the gate the fill measures.
-    const fits = (notional: bigint): boolean => {
-        const margin = budget - tradeFees(notional);
-        if (margin < 0n) return false;
-        if (notional * LEVERAGE_SCALE > margin * leverageScaled) return false;
-        return initMargin <= 0n || notional * initMargin <= margin * SCALAR_18;
-    };

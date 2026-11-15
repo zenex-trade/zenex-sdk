@@ -307,6 +307,35 @@ describe('OrderIntent', () => {
             const order = new OrderIntent(late, USER, true).stopLoss(trigger);
             expect(order.expiration).toBeLessThanOrEqual(0xffff_ffff);
         });
+
+        it('holds a market kind at the u32 ceiling too', () => {
+            const late = fixtureMarket({ ledger: NO_EXPIRY_LEDGER - 10 });
+            const order = new OrderIntent(late, USER, true).openMarket(sized);
+            expect(order.expiration).toBe(NO_EXPIRY_LEDGER);
+            const forever = new OrderIntent(market, USER, true, NO_EXPIRY_LEDGER);
+            expect(forever.closePosition().expiration).toBe(NO_EXPIRY_LEDGER);
+            expect(forever.addMargin(1n).expiration).toBe(NO_EXPIRY_LEDGER);
+            // A lifetime of zero is valid: the order fills through its own ledger.
+            const now = new OrderIntent(market, USER, true, 0, 0n, 0);
+            expect(now.openMarket(sized).expiration).toBe(market.ledger);
+            expect(now.stopLoss(trigger).expiration).toBe(market.ledger);
+        });
+
+        it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5, '60' as unknown as number])(
+            'rejects a lifetime of %s, naming the argument',
+            (lifetime) => {
+                expect(() => new OrderIntent(market, USER, true, lifetime)).toThrow(RangeError);
+                expect(() => new OrderIntent(market, USER, true, lifetime)).toThrow(
+                    /^ttlLedgers must be a finite, non-negative integer/,
+                );
+                expect(() => new OrderIntent(market, USER, true, 60, 0n, lifetime)).toThrow(
+                    RangeError,
+                );
+                expect(() => new OrderIntent(market, USER, true, 60, 0n, lifetime)).toThrow(
+                    /^triggerTtlLedgers must be a finite, non-negative integer/,
+                );
+            },
+        );
     });
 
     it('caps a stop entry above the trigger by the intent slippage', () => {
