@@ -33,39 +33,93 @@ const DEFAULT_ORDER_LOOKBACK = 50;
 const MAX_ORDER_LOOKBACK = 90;
 
 /**
- * One subject's state on one market: both stored positions, the order
- * counter, and claimable funding. Plain public fields. Pairing a user with
- * the market it was read against is the caller's responsibility.
- *
- * Read one with {@link MarketUser.load} or `Market.loadWithUser` rather than
- * the positional constructor, whose argument order may change in a major
- * release.
+ * The fields of a {@link MarketUser}, as its constructor takes them.
+ * {@link MarketUser.load} fills every one from the ledger.
  */
-export class MarketUser {
-    constructor(
-        /** The market (trading) contract this state was read from. */
-        public marketId: string,
-        /** Position owner. */
-        public userId: string,
-        /** Long side; zeroed when no row is stored (never opened). */
-        public long: MarketPosition,
-        /** Short side; zeroed when no row is stored (never opened). */
-        public short: MarketPosition,
-        /**
-         * The id the user's next order gets (trade and vault orders share
-         * the counter), as `get_order_counter` reports it: `1` when no
-         * counter is stored, since the user has never created an order.
-         */
-        public orderCounter: number,
-        /** Funding owed to the user, plus any parked failed payout, token-dec. */
-        public claimableCredit: bigint,
-        /**
-         * The entries whose TTL lapsed (archived). Each still decodes from
-         * the value the RPC returns, which stays the user's state: the next
-         * transaction that touches it restores it, and pays the restore fee.
-         */
-        public archived: readonly MarketUserEntry[] = [],
-    ) {}
+export interface MarketUserFields {
+    /** The market (trading) contract this state was read from. */
+    readonly marketId: string;
+    /** Position owner. */
+    readonly userId: string;
+    /** Long side; zeroed when no row is stored (never opened). */
+    readonly long: MarketPosition;
+    /** Short side; zeroed when no row is stored (never opened). */
+    readonly short: MarketPosition;
+    /**
+     * The id the user's next order gets (trade and vault orders share
+     * the counter), as `get_order_counter` reports it: `1` when no
+     * counter is stored, since the user has never created an order.
+     */
+    readonly orderCounter: number;
+    /** Funding owed to the user, plus any parked failed payout, token-dec. */
+    readonly claimableCredit: bigint;
+    /**
+     * The entries whose TTL lapsed (archived). Each still decodes from
+     * the value the RPC returns, which stays the user's state: the next
+     * transaction that touches it restores it, and pays the restore fee.
+     * Defaults to none when omitted.
+     */
+    readonly archived?: readonly MarketUserEntry[];
+}
+
+/**
+ * One subject's state on one market: both stored positions, the order
+ * counter, and claimable funding. Plain readonly fields. Pairing a user
+ * with the market it was read against is the caller's responsibility.
+ *
+ * Read one with {@link MarketUser.load} or `Market.loadWithUser`, or build
+ * one from indexed state with `new MarketUser({ ... })`.
+ */
+export class MarketUser implements MarketUserFields {
+    /** The market (trading) contract this state was read from. */
+    readonly marketId: string;
+    /** Position owner. */
+    readonly userId: string;
+    /** Long side; zeroed when no row is stored (never opened). */
+    readonly long: MarketPosition;
+    /** Short side; zeroed when no row is stored (never opened). */
+    readonly short: MarketPosition;
+    /**
+     * The id the user's next order gets (trade and vault orders share
+     * the counter), as `get_order_counter` reports it: `1` when no
+     * counter is stored, since the user has never created an order.
+     */
+    readonly orderCounter: number;
+    /** Funding owed to the user, plus any parked failed payout, token-dec. */
+    readonly claimableCredit: bigint;
+    /**
+     * The entries whose TTL lapsed (archived). Each still decodes from
+     * the value the RPC returns, which stays the user's state: the next
+     * transaction that touches it restores it, and pays the restore fee.
+     */
+    readonly archived: readonly MarketUserEntry[];
+
+    /**
+     * Build a user's state from its fields. `archived` defaults to none.
+     * @throws {TypeError} if called without a fields object, such as with
+     *   the positional arguments it took before 1.0.0.
+     */
+    constructor(fields: MarketUserFields) {
+        // The constructor took positional arguments before 1.0.0. Called
+        // that way from untyped code, it would build a user of `undefined`
+        // fields without a complaint.
+        if (
+            typeof fields !== 'object' ||
+            fields === null ||
+            typeof fields.marketId !== 'string'
+        ) {
+            throw new TypeError(
+                'new MarketUser() takes one fields object: new MarketUser({ marketId, userId, ... })',
+            );
+        }
+        this.marketId = fields.marketId;
+        this.userId = fields.userId;
+        this.long = fields.long;
+        this.short = fields.short;
+        this.orderCounter = fields.orderCounter;
+        this.claimableCredit = fields.claimableCredit;
+        this.archived = Object.freeze([...(fields.archived ?? [])]);
+    }
 
     /**
      * Read one subject's positions, counter, and claimable credit. One
@@ -220,14 +274,14 @@ export function decodeUser(
     const counter = read('orderCounter');
     const credit = read('claimableCredit');
 
-    return new MarketUser(
+    return new MarketUser({
         marketId,
         userId,
         long,
         short,
         // An absent counter reads 1, as the contract's get_order_counter does.
-        counter ? Number(scValToNative(counter)) : 1,
-        credit ? (scValToNative(credit) as bigint) : 0n,
+        orderCounter: counter ? Number(scValToNative(counter)) : 1,
+        claimableCredit: credit ? (scValToNative(credit) as bigint) : 0n,
         archived,
-    );
+    });
 }

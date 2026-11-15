@@ -38,7 +38,7 @@ function loneLong(notional: bigint, margin: bigint, tokens: bigint) {
             tokens: pair(tokens, 0n),
         },
     });
-    const position = new MarketPosition(true, margin, notional, tokens, 0n, 0n, 0n, 0n, 0n, []);
+    const position = new MarketPosition({ ...MarketPosition.zero(true), margin, notional, tokens });
     return { market, position };
 }
 

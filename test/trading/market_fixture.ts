@@ -16,6 +16,7 @@ import type {
 } from '../../src/contracts/market/types.js';
 import { Market } from '../../src/trading/market.js';
 import { MarketPosition } from '../../src/trading/position.js';
+import type { MarketPositionFields } from '../../src/trading/position.js';
 
 // Shared builders for trading-tier tests that construct a `Market` directly,
 // the way a cache or an indexer does, instead of mocking a ledger read.
@@ -210,22 +211,22 @@ export function flatPosition(isLong = true): MarketPosition {
  * carry the same row (`loneBook`).
  */
 export function lonePosition(
-    overrides: Partial<MarketPosition> = {},
+    overrides: Partial<MarketPositionFields> = {},
     isLong = true,
 ): MarketPosition {
-    const position = new MarketPosition(
+    return new MarketPosition({
         isLong,
-        unit(10),
-        unit(100),
-        unit(10),
-        0n,
-        0n,
-        0n,
-        0n,
-        0n,
-        [],
-    );
-    return Object.assign(position, overrides);
+        margin: unit(10),
+        notional: unit(100),
+        tokens: unit(10),
+        fundingIdx: 0n,
+        borrowingIdx: 0n,
+        lockedNotional: 0n,
+        unlocksAt: 0n,
+        pricedAt: 0n,
+        decreaseOrders: [],
+        ...overrides,
+    });
 }
 
 /** Market aggregates holding exactly `lonePosition` on one side. */

@@ -10,6 +10,7 @@ import type {
 import { OrderKind, Status, VaultOrderKind } from '../../src/contracts/market/types.js';
 import { Market } from '../../src/trading/market.js';
 import { MarketPosition } from '../../src/trading/position.js';
+import type { MarketPositionFields } from '../../src/trading/position.js';
 import { Price } from '../../src/trading/price.js';
 import { estimateMarket } from '../../src/trading/market_est.js';
 import { estimatePosition } from '../../src/trading/position_est.js';
@@ -105,23 +106,23 @@ function marketWithBook(): Market {
 }
 
 function openPosition(
-    overrides: Partial<MarketPosition> = {},
+    overrides: Partial<MarketPositionFields> = {},
 ): MarketPosition {
-    const position = new MarketPosition(
-        true,
-        unit(100),
-        unit(1000),
+    return new MarketPosition({
+        isLong: true,
+        margin: unit(100),
+        notional: unit(1000),
         // `to_tokens` = notional * SCALAR_18 / price, so with a token-dec
         // notional and an 18-dec price the base size is at TOKEN decimals.
-        unit(10),
-        0n,
-        0n,
-        0n,
-        0n,
-        0n,
-        [],
-    );
-    return Object.assign(position, overrides);
+        tokens: unit(10),
+        fundingIdx: 0n,
+        borrowingIdx: 0n,
+        lockedNotional: 0n,
+        unlocksAt: 0n,
+        pricedAt: 0n,
+        decreaseOrders: [],
+        ...overrides,
+    });
 }
 
 describe('float format helpers', () => {
@@ -374,7 +375,7 @@ describe('previewOrder', () => {
         expect(order.expiration).toBe(market.ledger + 60);
         expect(order.priceBound).toBe(0n);
 
-        const flat = new MarketPosition(true, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []);
+        const flat = MarketPosition.zero(true);
         const preview = previewOrder(market, flat, order, px(100), 1n);
         expect(preview.outcome).toBe('fills');
         expect(preview.executionPrice).toBe(100);

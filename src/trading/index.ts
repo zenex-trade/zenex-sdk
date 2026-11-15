@@ -7,8 +7,9 @@ export type { PriceInput } from './price.js';
 export { Market } from './market.js';
 export type { MarketContracts, MarketFields, ReadonlyMarketData } from './market.js';
 export { MarketUser } from './user.js';
-export type { MarketUserEntry, PendingOrder } from './user.js';
+export type { MarketUserEntry, MarketUserFields, PendingOrder } from './user.js';
 export { MarketPosition } from './position.js';
+export type { MarketPositionFields } from './position.js';
 export {
     OrderIntent,
     DEFAULT_ORDER_TTL_LEDGERS,

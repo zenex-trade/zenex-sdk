@@ -84,9 +84,21 @@ counter, and claimable credit. After about 120 idle days a user's entries
 archive. They still load from the archived values and are listed in
 `user.archived`; the next transaction that touches them restores them.
 `user.loadOrders(network)` lists pending orders straight from the chain.
-`MarketUser.load(network, market.id, USER)` reads a user alone. Build a
-position from a stored row with `MarketPosition.from(row, isLong)`, or an
-empty side with `MarketPosition.zero(isLong)`.
+`MarketUser.load(network, market.id, USER)` reads a user alone.
+
+Build a position from a stored row with `MarketPosition.from(row, isLong)`,
+or an empty side with `MarketPosition.zero(isLong)`. Like `Market`,
+`MarketPosition` and `MarketUser` have readonly fields and take them as one
+object, for a test or for state you indexed yourself:
+
+```ts
+const position = new MarketPosition({ isLong: true, margin, notional, tokens, ...rest });
+const larger = new MarketPosition({ ...position, margin: position.margin + added });
+const user = new MarketUser({
+    marketId, userId, long: position, short: MarketPosition.zero(false),
+    orderCounter: 1, claimableCredit: 0n,
+});
+```
 
 ## Preview an order
 

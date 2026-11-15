@@ -509,6 +509,70 @@ describe('the treasury rate in previews', () => {
     });
 });
 
+describe('MarketPosition constructor (one fields object)', () => {
+    const fields = {
+        isLong: true,
+        margin: unit(10),
+        notional: unit(100),
+        tokens: unit(10),
+        fundingIdx: 1n,
+        borrowingIdx: 2n,
+        lockedNotional: 3n,
+        unlocksAt: 4n,
+        pricedAt: 5n,
+        decreaseOrders: [8, 9],
+    };
+
+    it('builds a position from named fields', () => {
+        const position = new MarketPosition(fields);
+        expect({ ...position }).toEqual(fields);
+        expect(position.isOpen()).toBe(true);
+        expect(Object.keys(position).sort()).toEqual([
+            'borrowingIdx', 'decreaseOrders', 'fundingIdx', 'isLong', 'lockedNotional',
+            'margin', 'notional', 'pricedAt', 'tokens', 'unlocksAt',
+        ]);
+    });
+
+    it('matches MarketPosition.from for the same row', () => {
+        const { isLong, ...row } = fields;
+        expect(MarketPosition.from(row, isLong)).toEqual(new MarketPosition(fields));
+    });
+
+    it('owns its decreaseOrders: neither the fields passed in nor a derived position can change it', () => {
+        const decreaseOrders = [8, 9];
+        const position = new MarketPosition({ ...fields, decreaseOrders });
+        decreaseOrders.push(10);
+        expect(position.decreaseOrders).toEqual([8, 9]);
+
+        const derived = new MarketPosition({ ...position, margin: unit(20) });
+        expect(derived.margin).toBe(unit(20));
+        expect(position.margin).toBe(unit(10));
+        derived.decreaseOrders.push(11);
+        expect(position.decreaseOrders).toEqual([8, 9]);
+    });
+
+    it('takes a readonly list of order ids', () => {
+        const frozen: readonly number[] = Object.freeze([1]);
+        expect(new MarketPosition({ ...fields, decreaseOrders: frozen }).decreaseOrders).toEqual([1]);
+    });
+
+    it('has readonly fields', () => {
+        const position = new MarketPosition(fields);
+        // @ts-expect-error a position is a snapshot: derive a copy instead.
+        position.margin = 0n;
+    });
+
+    it('rejects the positional arguments it took before 1.0.0', () => {
+        const positional = MarketPosition as unknown as new (...args: unknown[]) => MarketPosition;
+        expect(
+            () => new positional(true, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []),
+        ).toThrow(TypeError);
+        expect(() => new positional()).toThrow(/takes one fields object/);
+        // @ts-expect-error the fields object is the only argument.
+        expect(() => new MarketPosition(true, 0n)).toThrow(TypeError);
+    });
+});
+
 describe('MarketPosition.zero', () => {
     it('is the contract Position::zeroed for the side', () => {
         const long = MarketPosition.zero(true);

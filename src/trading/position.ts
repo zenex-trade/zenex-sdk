@@ -21,59 +21,114 @@ import {
 } from './internal/position.js';
 
 /**
+ * The fields of a {@link MarketPosition}, as its constructor takes them: a
+ * stored position row plus the side it was stored under. Derive a changed
+ * copy by spreading a position: `new MarketPosition({ ...position, margin })`.
+ */
+export interface MarketPositionFields {
+    /** The side this row was stored under. */
+    readonly isLong: boolean;
+    /** Posted margin, token-dec. */
+    readonly margin: bigint;
+    /** Open size, token-dec. Zero means no open position. */
+    readonly notional: bigint;
+    /** Base size, token-dec. */
+    readonly tokens: bigint;
+    /** Funding index snapshot at the last change. */
+    readonly fundingIdx: bigint;
+    /** Borrowing index snapshot at the last change. */
+    readonly borrowingIdx: bigint;
+    /** Notional under the decrease lock, token-dec. */
+    readonly lockedNotional: bigint;
+    /** Unix seconds the decrease lock lapses at. */
+    readonly unlocksAt: bigint;
+    /** Unix seconds of the last pricing touch. */
+    readonly pricedAt: bigint;
+    /** Ids of pending decrease orders riding this side. */
+    readonly decreaseOrders: readonly number[];
+}
+
+/**
  * One stored position that knows its side. `MarketUser.load` stamps `isLong`
  * from the storage key it read, so the methods never ask for it. All exact
- * bigints; the float view of the same numbers is `PositionEstimate`.
+ * bigints; the float view of the same numbers is `PositionEstimate`. Plain
+ * readonly fields, with its own copy of `decreaseOrders`.
  *
  * Methods that take a `market` measure against it as passed. Accrue first
  * (`market.accrue(price)`) when you want fill-grade numbers.
  *
- * Build one with {@link MarketPosition.from} or {@link MarketPosition.zero}
- * rather than the positional constructor.
+ * Build one with {@link MarketPosition.from} from a stored row, with
+ * {@link MarketPosition.zero} for an empty side, or from its fields with
+ * `new MarketPosition({ ... })`.
  */
-export class MarketPosition {
-    constructor(
-        /** The side this row was stored under. */
-        public isLong: boolean,
-        /** Posted margin, token-dec. */
-        public margin: bigint,
-        /** Open size, token-dec. Zero means no open position. */
-        public notional: bigint,
-        /** Base size, token-dec. */
-        public tokens: bigint,
-        /** Funding index snapshot at the last change. */
-        public fundingIdx: bigint,
-        /** Borrowing index snapshot at the last change. */
-        public borrowingIdx: bigint,
-        /** Notional under the decrease lock, token-dec. */
-        public lockedNotional: bigint,
-        /** Unix seconds the decrease lock lapses at. */
-        public unlocksAt: bigint,
-        /** Unix seconds of the last pricing touch. */
-        public pricedAt: bigint,
-        /** Ids of pending decrease orders riding this side. */
-        public decreaseOrders: number[],
-    ) {}
+export class MarketPosition implements MarketPositionFields {
+    /** The side this row was stored under. */
+    readonly isLong: boolean;
+    /** Posted margin, token-dec. */
+    readonly margin: bigint;
+    /** Open size, token-dec. Zero means no open position. */
+    readonly notional: bigint;
+    /** Base size, token-dec. */
+    readonly tokens: bigint;
+    /** Funding index snapshot at the last change. */
+    readonly fundingIdx: bigint;
+    /** Borrowing index snapshot at the last change. */
+    readonly borrowingIdx: bigint;
+    /** Notional under the decrease lock, token-dec. */
+    readonly lockedNotional: bigint;
+    /** Unix seconds the decrease lock lapses at. */
+    readonly unlocksAt: bigint;
+    /** Unix seconds of the last pricing touch. */
+    readonly pricedAt: bigint;
+    /** Ids of pending decrease orders riding this side. The position's own copy of the list. */
+    readonly decreaseOrders: number[];
 
     /**
-     * Wrap a parsed storage row (e.g. from an indexer) with its side. This
-     * and {@link MarketPosition.zero} are the stable ways to build a
-     * position: they name every field, where the constructor takes ten
-     * positional arguments whose order may change in a major release.
+     * Build a position from its fields. `decreaseOrders` is copied.
+     * @throws {TypeError} if called without a fields object, such as with
+     *   the positional arguments it took before 1.0.0.
      */
+    constructor(fields: MarketPositionFields) {
+        // The constructor took ten positional arguments before 1.0.0.
+        // Called that way from untyped code, it would build a position of
+        // `undefined` fields without a complaint.
+        if (
+            typeof fields !== 'object' ||
+            fields === null ||
+            typeof fields.isLong !== 'boolean'
+        ) {
+            throw new TypeError(
+                'new MarketPosition() takes one fields object: new MarketPosition({ isLong, margin, ... })',
+            );
+        }
+        this.isLong = fields.isLong;
+        this.margin = fields.margin;
+        this.notional = fields.notional;
+        this.tokens = fields.tokens;
+        this.fundingIdx = fields.fundingIdx;
+        this.borrowingIdx = fields.borrowingIdx;
+        this.lockedNotional = fields.lockedNotional;
+        this.unlocksAt = fields.unlocksAt;
+        this.pricedAt = fields.pricedAt;
+        // The position owns its list, so a later write to the caller's
+        // array, or to a position derived from this one, cannot change it.
+        this.decreaseOrders = [...fields.decreaseOrders];
+    }
+
+    /** Wrap a parsed storage row (e.g. from an indexer) with its side. */
     static from(row: Position, isLong: boolean): MarketPosition {
-        return new MarketPosition(
+        return new MarketPosition({
             isLong,
-            row.margin,
-            row.notional,
-            row.tokens,
-            row.fundingIdx,
-            row.borrowingIdx,
-            row.lockedNotional,
-            row.unlocksAt,
-            row.pricedAt,
-            [...row.decreaseOrders],
-        );
+            margin: row.margin,
+            notional: row.notional,
+            tokens: row.tokens,
+            fundingIdx: row.fundingIdx,
+            borrowingIdx: row.borrowingIdx,
+            lockedNotional: row.lockedNotional,
+            unlocksAt: row.unlocksAt,
+            pricedAt: row.pricedAt,
+            decreaseOrders: row.decreaseOrders,
+        });
     }
 
     /**
@@ -82,7 +137,18 @@ export class MarketPosition {
      * loads as, and the position to preview a first open against.
      */
     static zero(isLong: boolean): MarketPosition {
-        return new MarketPosition(isLong, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []);
+        return new MarketPosition({
+            isLong,
+            margin: 0n,
+            notional: 0n,
+            tokens: 0n,
+            fundingIdx: 0n,
+            borrowingIdx: 0n,
+            lockedNotional: 0n,
+            unlocksAt: 0n,
+            pricedAt: 0n,
+            decreaseOrders: [],
+        });
     }
 
     /** Whether this side carries any size. */
