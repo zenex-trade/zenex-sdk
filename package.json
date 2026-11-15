@@ -22,7 +22,7 @@
         "build:pkg": "node -e \"fs=require('fs');fs.writeFileSync('dist/esm/package.json','{\\\"type\\\":\\\"module\\\"}');fs.writeFileSync('dist/cjs/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\"",
         "build": "npm run clean && npm run build:cjs && npm run build:esm && npm run build:pkg",
         "prepare": "npm run build",
-        "prepublishOnly": "npm test && npm run architecture:check",
+        "prepublishOnly": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run architecture:check",
         "test": "vitest run",
         "test:coverage": "vitest run --coverage",
         "typecheck": "tsc -p tsconfig.test.json",
