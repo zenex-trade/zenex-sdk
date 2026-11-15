@@ -11,6 +11,7 @@ describe('package root type exports', () => {
             import type {
                 MarketContracts,
                 MarketEstimate,
+                MaxMarginForBalance,
                 OrderEstimate,
                 PendingOrder,
                 PositionEstimate,
@@ -18,6 +19,8 @@ describe('package root type exports', () => {
                 SideRatesEstimate,
             } from '../src/index.js';
             import { Price } from '../src/index.js';
+
+            export const max: MaxMarginForBalance = { orderMargin: 1n, notional: 5n, positionMargin: 1n };
 
             export const contracts: MarketContracts = {
                 market: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM',

@@ -2,7 +2,8 @@ import type { OrderParams } from '../contracts/router/types.js';
 import type { ZenexError } from '../errors.js';
 import { zenexErrorFromGate } from './internal/gate.js';
 import { OrderKind } from '../contracts/market/types.js';
-import { formatPrice, formatToken, formatTokenFloor } from '../float.js';
+import { formatPrice, formatToken } from '../float.js';
+import { SCALAR_18 } from '../math/fixed.js';
 import type { Market } from './market.js';
 import { MarketPosition } from './position.js';
 import type { PositionEstimate } from './position_est.js';
@@ -487,35 +488,75 @@ export function previewOrder(
 const LEVERAGE_SCALE = 10_000n;
 
 /**
- * Largest position margin a wallet balance affords at a chosen leverage,
- * AFTER the opening fees: the margin the position holds once the fill has
- * debited them. The order ticket's "Max" button.
+ * The order {@link maxMarginForBalance} sizes for a wallet balance, in
+ * atomic token units. `notional` and `orderMargin` go into the order;
+ * `positionMargin` is what the position holds once it has filled.
+ */
+export interface MaxMarginForBalance {
+    /**
+     * The `margin` argument of the order, token-dec: `balance - execFee`.
+     * The contract escrows `margin + execFee` at creation, so this margin
+     * takes the whole balance out of the wallet. `0n` when the balance
+     * affords no position.
+     */
+    readonly orderMargin: bigint;
+    /**
+     * The `notional` argument of the order, token-dec: the solved position
+     * margin times the leverage, rounded down, and never more than the
+     * initial-margin floor allows for that margin.
+     */
+    readonly notional: bigint;
+    /**
+     * The margin the position holds after the fill, token-dec:
+     * `orderMargin` less the base and impact fees the fill debits from it.
+     * Show this as the position's margin. It is NOT the order's `margin`:
+     * passed as one, the fill debits the fees from it again, and at the
+     * maximum leverage the fill fails the initial-margin gate
+     * (`InsufficientMargin`, 713).
+     */
+    readonly positionMargin: bigint;
+}
+
+/**
+ * The largest open a wallet balance affords at a chosen leverage, spending
+ * the whole balance. The order ticket's "Max" button.
  *
- * This is not the order's `margin` argument. On chain an increase escrows
- * `margin + execFee` from the wallet, and the fill then takes the base and
- * impact fees out of that margin, so the position keeps `margin - fees`.
- * The result solves `balance = positionMargin + tradeFee(positionMargin *
- * leverage) + execFee` against the fee model (base fee at the side's rate
- * plus the size-quadratic impact fee).
+ * On chain an increase escrows `margin + execFee` from the wallet
+ * (`Order::escrow_amount`), and the fill then debits the base and impact
+ * fees from that margin (`Position::increase`), so the position keeps
+ * `margin - fees`. Two margins follow, and the result names both:
  *
- * To spend the whole balance at the leverage, size the order from the
- * result and pass the fees along in the escrow:
+ * - `orderMargin = balance - execFee` is what the order carries.
+ * - `positionMargin = orderMargin - tradeFee(notional)` is what the
+ *   position holds.
  *
- * - `notional = result * leverage`
- * - `margin = balance - market.config.execFee`
+ * `notional` is the largest size with `positionMargin * leverage >=
+ * notional`, found against the fee model (base fee at the side's rate plus
+ * the size-quadratic impact fee). Build the order from the result:
  *
- * Passing the result itself as `margin` leaves the fees unspent in the
- * wallet and opens above the chosen leverage, since the fill debits them
- * from the smaller margin. At the market's maximum leverage that fill fails
- * the initial-margin gate (`InsufficientMargin`, 713).
+ * ```ts
+ * const max = maxMarginForBalance(market, true, balance, 5, price);
+ * const order = intent.openMarket({ notional: max.notional, margin: max.orderMargin });
+ * ```
+ *
+ * That order escrows exactly `balance`, and its fill leaves a position of
+ * `max.positionMargin` at no more than the chosen leverage. A leverage above
+ * what the market's initial margin allows is capped at that maximum, so the
+ * order passes the initial-margin gate (713) at any leverage.
  *
  * The fees are those of an open on a flat side at this snapshot. An
  * increase of an existing position also settles its pending funding and
- * borrowing out of the margin, which this does not count.
+ * borrowing out of the margin, which this does not count. The other gates
+ * (position and order minimums, the open-interest and utilization caps) are
+ * not solved for: preview the order.
  *
- * @returns Token units, floor-rounded so the value round-trips through an
- *   input field and `parseAtomic` without exceeding the true maximum. `0`
- *   when the balance cannot cover the fees.
+ * All three values are exact integers in atomic token units. For an input
+ * field, format one with `formatTokenFloor(value, market.assetDecimals)`.
+ *
+ * @param leverage Notional over position margin, read to four decimals.
+ * @returns The order's `notional` and `margin` and the resulting position
+ *   margin. All `0n` when the balance does not cover the execution fee, the
+ *   leverage is not positive, or no size is affordable.
  */
 export function maxMarginForBalance(
     market: Market,
@@ -523,16 +564,25 @@ export function maxMarginForBalance(
     balance: bigint,
     leverage: number,
     price: PriceInput,
-): number {
-    if (balance <= market.config.execFee || leverage <= 0) return 0;
+): MaxMarginForBalance {
+    const none = { orderMargin: 0n, notional: 0n, positionMargin: 0n };
+    if (balance <= market.config.execFee || !(leverage > 0)) return none;
     const priceData = marketPrice(market, price, quoteTime(market));
     const entry = isLong ? priceData.ask : priceData.bid;
-    if (entry <= 0n) return 0;
+    if (entry <= 0n) return none;
     const leverageScaled = BigInt(Math.round(leverage * Number(LEVERAGE_SCALE)));
+    const initMargin = market.config.initMargin;
     const budget = balance - market.config.execFee;
 
-    const cost = (margin: bigint): bigint => {
-        const notional = (margin * leverageScaled) / LEVERAGE_SCALE;
+    // The size a position margin carries: the leverage, capped where the
+    // initial-margin floor `ceil(initMargin * notional) <= margin` binds.
+    const notionalFor = (margin: bigint): bigint => {
+        const levered = (margin * leverageScaled) / LEVERAGE_SCALE;
+        if (initMargin <= 0n) return levered;
+        const floor = (margin * SCALAR_18) / initMargin;
+        return levered < floor ? levered : floor;
+    };
+    const tradeFees = (notional: bigint): bigint => {
         const tokens = entryTokens(notional, entry, isLong);
         const fees = quoteTradeFees(
             market.data,
@@ -541,17 +591,25 @@ export function maxMarginForBalance(
             notional,
             tokens,
         );
-        return margin + fees.base + fees.impact;
+        return fees.base + fees.impact;
     };
 
-    // cost() grows monotonically with margin, so binary search the largest
-    // margin whose all-in cost still fits the budget.
+    // margin + fees grows monotonically with margin, so binary search the
+    // largest position margin whose all-in cost still fits the budget.
     let low = 0n;
     let high = budget;
     while (low < high) {
         const mid = low + (high - low + 1n) / 2n;
-        if (cost(mid) <= budget) low = mid;
+        if (mid + tradeFees(notionalFor(mid)) <= budget) low = mid;
         else high = mid - 1n;
     }
-    return formatTokenFloor(low, market.assetDecimals);
+    const notional = notionalFor(low);
+    if (notional <= 0n) return none;
+    // The order carries the whole budget, so the position keeps the budget
+    // less the fees of the size: at least `low`, by the search.
+    return {
+        orderMargin: budget,
+        notional,
+        positionMargin: budget - tradeFees(notional),
+    };
 }

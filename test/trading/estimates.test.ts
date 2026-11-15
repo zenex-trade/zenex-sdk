@@ -15,9 +15,11 @@ import { estimateMarket } from '../../src/trading/market_est.js';
 import { estimatePosition } from '../../src/trading/position_est.js';
 import {
     OrderIntent,
+    marketContext,
     maxMarginForBalance,
     previewOrder,
 } from '../../src/trading/order.js';
+import { applyOrder } from '../../src/trading/internal/apply.js';
 import { VaultOrderIntent } from '../../src/trading/vault_order.js';
 import {
     SECONDS_PER_YEAR,
@@ -438,97 +440,114 @@ describe('previewOrder', () => {
 });
 
 describe('maxMarginForBalance', () => {
-    it('inverts the fee model inside the balance', () => {
-        const market = loadedMarket({}, {}, unit(100_000));
-        const max = maxMarginForBalance(market, true, unit(100), 5, px(100));
-        expect(max).toBeGreaterThan(0);
-        expect(max).toBeLessThan(100);
-        // Spending the reported max plus fees must fit inside the balance.
-        const intent = new OrderIntent(market, USER, true);
-        const notional = BigInt(Math.round(max * 5 * 10 ** TOKEN_DECIMALS));
-        const margin = BigInt(Math.round(max * 10 ** TOKEN_DECIMALS));
-        const preview = previewOrder(
-            market,
-            new MarketPosition(true, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, []),
-            intent.openMarket({ notional, margin }),
-            px(100),
-            1n,
+    // The exact engine: the position and fees a fill of `order` leaves.
+    const fill = (market: Market, isLong: boolean, notional: bigint, margin: bigint) => {
+        const order = new OrderIntent(market, USER, isLong).openMarket({ notional, margin });
+        const applied = applyOrder(
+            marketContext(market, MarketPosition.zero(isLong), px(100), 1n, USER),
+            order,
+            { executionFee: market.config.execFee },
         );
-        expect(preview.outcome).toBe('fills');
-        expect(
-            margin +
-                BigInt(Math.round(preview.baseFee * 10 ** TOKEN_DECIMALS)) +
-                BigInt(Math.round(preview.impactFee * 10 ** TOKEN_DECIMALS)) +
-                market.config.execFee,
-        ).toBeLessThanOrEqual(unit(100));
-    });
+        return { order, applied };
+    };
+    /** What the contract escrows for an increase: `Order::escrow_amount`. */
+    const escrow = (market: Market, margin: bigint) => margin + market.config.execFee;
+    /** The highest leverage the initial-margin floor allows. */
+    const maxLeverage = (market: Market) => Number(SCALAR_18 / market.config.initMargin);
 
-    it('is the post-fee position margin: the whole balance escrows and the fill keeps the max', () => {
-        // On chain an increase escrows margin + execFee and debits the trade
-        // fees from the margin, so the order margin that spends the balance
-        // is balance - execFee, and the position keeps the reported max.
+    it('sizes an order that escrows the balance exactly and fills to the reported position margin', () => {
         const market = loadedMarket({}, {}, unit(100_000));
         const balance = unit(100);
-        const leverage = 5;
-        const max = maxMarginForBalance(market, true, balance, leverage, px(100));
-        const notional = BigInt(Math.floor(max * leverage * 10 ** TOKEN_DECIMALS));
-        const margin = balance - market.config.execFee;
-        const preview = previewOrder(
-            market,
-            MarketPosition.zero(true),
-            new OrderIntent(market, USER, true).openMarket({ notional, margin }),
-            px(100),
-            1n,
-        );
+        const max = maxMarginForBalance(market, true, balance, 5, px(100));
+        expect(max.orderMargin).toBe(balance - market.config.execFee);
+        expect(max.positionMargin).toBeGreaterThan(0n);
+        expect(max.positionMargin).toBeLessThan(max.orderMargin);
+
+        const { order, applied } = fill(market, true, max.notional, max.orderMargin);
+        // The wallet pays the whole balance, to the unit.
+        expect(escrow(market, order.margin)).toBe(balance);
+        if (applied.kind !== 'fills') throw new Error(`expected a fill, got ${applied.kind}`);
+        // The position holds exactly the reported margin: order margin less the fees.
+        expect(applied.outcome.postPosition.margin).toBe(max.positionMargin);
+        expect(applied.outcome.fees.base + applied.outcome.fees.impact)
+            .toBe(max.orderMargin - max.positionMargin);
+        expect(applied.outcome.postPosition.notional).toBe(max.notional);
+        // At or under the chosen leverage, in exact integers.
+        expect(max.notional).toBeLessThanOrEqual(max.positionMargin * 5n);
+
+        // And it is the largest such size: five more units of notional open
+        // above the leverage.
+        const more = fill(market, true, max.notional + 5n, max.orderMargin).applied;
+        if (more.kind !== 'fills') throw new Error(`expected a fill, got ${more.kind}`);
+        expect(max.notional + 5n).toBeGreaterThan(more.outcome.postPosition.margin * 5n);
+
+        // The float preview agrees.
+        const preview = previewOrder(market, MarketPosition.zero(true), order, px(100), 1n);
         expect(preview.outcome).toBe('fills');
-        // The wallet pays exactly the balance.
-        expect(preview.escrowed).toBeCloseTo(formatToken(balance, TOKEN_DECIMALS), 6);
-        // The position's margin is the reported max, and the leverage holds.
-        expect(preview.position!.margin).toBeCloseTo(max, 5);
-        expect(preview.position!.margin).toBeGreaterThanOrEqual(max);
-        expect(preview.position!.notional / preview.position!.margin).toBeLessThanOrEqual(leverage);
-        // Passing the max itself as the order margin leaves the fees unspent
-        // and opens above the chosen leverage.
-        const naive = previewOrder(
-            market,
-            MarketPosition.zero(true),
-            new OrderIntent(market, USER, true).openMarket({
-                notional,
-                margin: BigInt(Math.floor(max * 10 ** TOKEN_DECIMALS)),
-            }),
-            px(100),
-            1n,
-        );
-        expect(naive.outcome).toBe('fills');
-        expect(naive.escrowed).toBeLessThan(formatToken(balance, TOKEN_DECIMALS));
-        expect(naive.position!.margin).toBeLessThan(max);
-        expect(naive.position!.notional / naive.position!.margin).toBeGreaterThan(leverage);
+        expect(preview.escrowed).toBe(formatToken(balance, TOKEN_DECIMALS));
+        expect(preview.position!.margin).toBe(formatToken(max.positionMargin, TOKEN_DECIMALS));
     });
 
-    it('at the maximum leverage the result gates as an order margin and fills as a position margin', () => {
+    it.each([true, false])('at the maximum leverage the order passes the margin gate (isLong %s)', (isLong) => {
         const market = loadedMarket({}, {}, unit(100_000));
         const balance = unit(100);
-        // The highest leverage the initial-margin floor allows.
-        const leverage = Number(SCALAR_18 / market.config.initMargin);
-        const max = maxMarginForBalance(market, true, balance, leverage, px(100));
-        const notional = BigInt(Math.floor(max * leverage * 10 ** TOKEN_DECIMALS));
-        const preview = (margin: bigint) =>
-            previewOrder(
-                market,
-                MarketPosition.zero(true),
-                new OrderIntent(market, USER, true).openMarket({ notional, margin }),
-                px(100),
-                1n,
-            );
-        const naive = preview(BigInt(Math.floor(max * 10 ** TOKEN_DECIMALS)));
-        expect(naive.outcome).toBe('gate');
-        expect(naive.gate?.code).toBe(713);
-        expect(preview(balance - market.config.execFee).outcome).toBe('fills');
+        const leverage = maxLeverage(market);
+        const max = maxMarginForBalance(market, isLong, balance, leverage, px(100));
+
+        const { order, applied } = fill(market, isLong, max.notional, max.orderMargin);
+        expect(escrow(market, order.margin)).toBe(balance);
+        if (applied.kind !== 'fills') throw new Error(`expected a fill, got ${applied.kind}`);
+        expect(applied.outcome.postPosition.margin).toBe(max.positionMargin);
+        // The initial-margin floor, as the contract measures it: ceil(initMargin * notional).
+        const required =
+            (max.notional * market.config.initMargin + SCALAR_18 - 1n) / SCALAR_18;
+        expect(max.positionMargin).toBeGreaterThanOrEqual(required);
+        // It sits on the floor: the full leverage is used, to within the rounding of one fee step.
+        expect(max.positionMargin - required).toBeLessThan(10n);
+
+        // The position margin is not the order margin: passed as one, the
+        // fill debits the fees from it again and fails the gate.
+        const naive = fill(market, isLong, max.notional, max.positionMargin).applied;
+        if (naive.kind !== 'gate') throw new Error(`expected a gate, got ${naive.kind}`);
+        expect(naive.code).toBe(713);
     });
 
-    it('returns zero when the balance cannot cover the execution fee', () => {
+    it('caps a leverage above the market maximum at the initial-margin floor', () => {
+        const market = loadedMarket({}, {}, unit(100_000));
+        const balance = unit(100);
+        const atMaximum = maxMarginForBalance(market, true, balance, maxLeverage(market), px(100));
+        const beyond = maxMarginForBalance(market, true, balance, maxLeverage(market) * 5, px(100));
+        expect(beyond).toEqual(atMaximum);
+        expect(fill(market, true, beyond.notional, beyond.orderMargin).applied.kind).toBe('fills');
+    });
+
+    it('holds across balances, leverages and sides, on a market with a skewed book', () => {
+        const market = marketWithBook();
+        for (const isLong of [true, false]) {
+            for (const balance of [unit(3), unit(100) + 1n, unit(2_500) + 7_777_777n]) {
+                for (const leverage of [1, 2.5, 7.3333, maxLeverage(market)]) {
+                    const label = `isLong ${isLong}, balance ${balance}, leverage ${leverage}`;
+                    const max = maxMarginForBalance(market, isLong, balance, leverage, px(100));
+                    const { order, applied } = fill(market, isLong, max.notional, max.orderMargin);
+                    expect(escrow(market, order.margin), label).toBe(balance);
+                    expect(applied.kind, label).toBe('fills');
+                    if (applied.kind !== 'fills') continue;
+                    expect(applied.outcome.postPosition.margin, label).toBe(max.positionMargin);
+                    const scaled = BigInt(Math.round(leverage * 10_000));
+                    expect(max.notional * 10_000n, label)
+                        .toBeLessThanOrEqual(max.positionMargin * scaled);
+                }
+            }
+        }
+    });
+
+    it('returns zeros when the balance affords no position', () => {
         const market = loadedMarket();
-        expect(maxMarginForBalance(market, true, 0n, 5, px(100))).toBe(0);
+        const none = { orderMargin: 0n, notional: 0n, positionMargin: 0n };
+        expect(maxMarginForBalance(market, true, 0n, 5, px(100))).toEqual(none);
+        expect(maxMarginForBalance(market, true, market.config.execFee, 5, px(100))).toEqual(none);
+        expect(maxMarginForBalance(market, true, unit(100), 0, px(100))).toEqual(none);
+        expect(maxMarginForBalance(market, true, unit(100), Number.NaN, px(100))).toEqual(none);
     });
 });
 

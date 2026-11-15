@@ -134,13 +134,29 @@ The contract accepts any expiration at or after the current ledger, and an
 order fills through its expiration ledger. An expired order never fills, and
 its escrow stays in the market until the order is cancelled.
 
-`maxMarginForBalance` returns the largest position margin a wallet balance
-affords at a leverage, after the opening fees. It is not the order's
-`margin`: the wallet pays `margin + execFee`, and the fill takes the trade
-fees out of that margin. To spend the whole balance, open with
-`notional = result * leverage` and `margin = balance - market.config.execFee`.
-Passing the result itself as `margin` opens above the chosen leverage, and at
-the maximum leverage the fill fails the margin gate (713).
+`maxMarginForBalance` sizes the largest open a wallet balance affords at a
+leverage, spending the whole balance. It returns three exact amounts in
+atomic units:
+
+| Field | Meaning |
+|---|---|
+| `notional` | the order's `notional` |
+| `orderMargin` | the order's `margin`: `balance - execFee`, since the wallet pays `margin + execFee` |
+| `positionMargin` | the margin the position holds after the fill, which takes the trade fees out of the order's margin |
+
+```ts
+import { maxMarginForBalance, formatTokenFloor } from '@zenex-trade/zenex-sdk';
+
+const max = maxMarginForBalance(market, true, balance, 5, price);
+const order = intent.openMarket({ notional: max.notional, margin: max.orderMargin });
+formatTokenFloor(max.positionMargin, market.assetDecimals); // the margin to display
+```
+
+The order escrows exactly `balance` and opens at or under the leverage. A
+leverage above what the market's initial margin allows is capped at that
+maximum, so the order passes the margin gate (713). Do not pass
+`positionMargin` as the order's `margin`: the fill would take the fees out of
+it again.
 
 For amounts, parse what the user typed with `parseAtomic(text, decimals)`,
 which is exact. `toFixed(number, decimals)` converts a number that is already

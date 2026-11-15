@@ -21,7 +21,7 @@ export {
     isTriggerOrderKind,
     orderPriceBound,
 } from './order.js';
-export type { OrderEstimate } from './order.js';
+export type { MaxMarginForBalance, OrderEstimate } from './order.js';
 export { estimateMarket } from './market_est.js';
 export type { MarketEstimate, SideRatesEstimate } from './market_est.js';
 export { estimatePosition } from './position_est.js';
