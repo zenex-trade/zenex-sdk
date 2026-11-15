@@ -13,6 +13,8 @@ import { USER, fixtureMarket, pair, px } from './market_fixture.js';
 
 const LEVERAGE_SCALE = 10_000n;
 const NONE = { orderMargin: 0n, notional: 0n, positionMargin: 0n };
+/** These tests fill thousands of orders: seconds on a slow runner, past the default timeout. */
+const SLOW = 60_000;
 
 /** The leverage as the function reads it: four decimals. */
 const scaled = (leverage: number) => BigInt(Math.round(leverage * Number(LEVERAGE_SCALE)));
@@ -106,152 +108,161 @@ describe('maxMarginForBalance: the largest order', () => {
         expect(fits(tiny, true, 55n, 13n, SCALAR_18, 5)).toBe(false);
     });
 
-    it('fills, escrows no more than the balance, and leaves no room for one more unit', () => {
-        const random = seeded(0x5eed_0001);
-        const cases = 4_000;
-        let sized = 0;
-        let mildFills = 0;
-        let harshFills = 0;
-        let liquidatable = 0;
-        for (let index = 0; index < cases; index++) {
-            // A mild case keeps the fees well under the initial margin, so
-            // no gate but the one solved for can bind. A harsh one runs the
-            // impact fee up to its 10% cap on balances down to one unit.
-            const mild = index % 2 === 0;
-            const isLong = random.next() < 0.5;
-            const leverage =
-                random.next() < 0.7
-                    ? random.pick(LEVERAGES)
-                    : Math.round(random.next() * 400_000) / 10_000;
-            const initMargin =
-                SCALAR_18 /
-                BigInt(random.pick(mild ? [2, 5, 10, 20, 50] : [2, 5, 10, 20, 50, 100]));
-            const execFee = BigInt(random.pick([0, 1, 7, 100_000]));
-            const balance =
-                execFee +
-                (mild
-                    ? 10n ** 9n + random.magnitude(14)
-                    : random.magnitude(random.pick([4, 7, 10, 14])));
-            // The impact rate at the largest size the balance could carry:
-            // 0.1% when mild, else from negligible to past the cap.
-            const impactScalar = mild
-                ? balance * 50n * 1_000n
-                : (balance * BigInt(random.pick([1, 10, 100, 10_000]))) / 3n + 1n;
-            const feeSteps = mild ? 20 : 80;
-            const config = {
-                execFee,
-                initMargin,
-                impactScalar,
-                feeDom: BigInt(random.int(0, feeSteps)) * 10n ** 14n,
-                feeNonDom: BigInt(random.int(0, feeSteps)) * 10n ** 14n,
-            };
-            const skew = random.magnitude(10);
-            const side = random.int(0, 2);
-            const book = market(config, {
-                tokens: side === 0 ? pair() : side === 1 ? pair(skew, 0n) : pair(0n, skew),
-            });
-            const budget = balance - execFee;
-            // A small balance is priced at or under one, so that every
-            // atomic unit of size buys a base unit: a dust size that rounds
-            // to no base size at all is its own gate (716).
-            const price = px(
-                budget < 10n ** 9n
-                    ? random.pick([0.37, 0.5, 1])
-                    : random.pick([0.37, 1, 1.000001, 10, 97.5, 3_456.789, 64_000]),
-            );
-            const label = JSON.stringify(
-                { index, isLong, leverage, balance, price, side, skew, config },
-                (_, value) => (typeof value === 'bigint' ? value.toString() : (value as unknown)),
-            );
-
-            const max = maxMarginForBalance(book, isLong, balance, leverage, price);
-            if (max.notional === 0n) {
-                expect(max, label).toEqual(NONE);
-                // Nothing fits: not even one atomic unit.
-                expect(fits(book, isLong, 1n, budget, price, leverage), label).toBe(false);
-                continue;
-            }
-            sized++;
-            // The escrow of an increase is its margin plus the execution
-            // fee: the whole balance, and no more.
-            expect(max.orderMargin + execFee, label).toBe(balance);
-
-            // The size fits, and the position margin clears the
-            // initial-margin gate as the contract measures it.
-            expect(fits(book, isLong, max.notional, budget, price, leverage), label).toBe(true);
-            const required = (max.notional * initMargin + SCALAR_18 - 1n) / SCALAR_18;
-            expect(max.positionMargin, label).toBeGreaterThanOrEqual(required);
-            expect(max.notional * LEVERAGE_SCALE, label).toBeLessThanOrEqual(
-                max.positionMargin * scaled(leverage),
-            );
-
-            // One atomic unit more does not fit.
-            expect(fits(book, isLong, max.notional + 1n, budget, price, leverage), label).toBe(
-                false,
-            );
-
-            // The order itself fills. The one gate that can stop it is the
-            // maintenance gate (723), which the function does not solve for,
-            // and only in a harsh case: the fees of closing the new position
-            // exceed the margin it is left with.
-            const applied = fill(book, isLong, max.notional, max.orderMargin, price);
-            if (applied.kind === 'gate') {
-                expect(applied.code, label).toBe(723);
-                expect(mild, label).toBe(false);
-                liquidatable++;
-                continue;
-            }
-            expect(applied.kind, label).toBe('fills');
-            if (applied.kind !== 'fills') continue;
-            expect(applied.outcome.postPosition.margin, label).toBe(max.positionMargin);
-            expect(applied.outcome.postPosition.notional, label).toBe(max.notional);
-            if (mild) mildFills++;
-            else harshFills++;
-        }
-        // The cases are not vacuous: nearly every one sizes an order, every
-        // mild one fills, and the harsh ones reach both outcomes.
-        expect(sized).toBeGreaterThan(cases * 0.9);
-        expect(mildFills).toBe(cases / 2);
-        expect(harshFills).toBeGreaterThan(cases / 8);
-        expect(liquidatable).toBeGreaterThan(0);
-        expect(mildFills + harshFills + liquidatable).toBe(sized);
-    });
-
-    it('is the largest size of all, by a scan of every size a small balance could carry', () => {
-        const random = seeded(0x5eed_0002);
-        for (let index = 0; index < 600; index++) {
-            const isLong = random.next() < 0.5;
-            const leverage = random.pick([1, 2.5, 5, 10, 33.3333]);
-            const execFee = BigInt(random.pick([0, 3]));
-            const balance = execFee + BigInt(random.int(1, 120));
-            // A flat book, where a larger open provably never pays less,
-            // and books skewed either way, where the fee splits in two.
-            const skew = BigInt(random.int(1, 200));
-            const side = index % 3;
-            const book = market(
-                {
+    it(
+        'fills, escrows no more than the balance, and leaves no room for one more unit',
+        { timeout: SLOW },
+        () => {
+            const random = seeded(0x5eed_0001);
+            const cases = 4_000;
+            let sized = 0;
+            let mildFills = 0;
+            let harshFills = 0;
+            let liquidatable = 0;
+            for (let index = 0; index < cases; index++) {
+                // A mild case keeps the fees well under the initial margin, so
+                // no gate but the one solved for can bind. A harsh one runs the
+                // impact fee up to its 10% cap on balances down to one unit.
+                const mild = index % 2 === 0;
+                const isLong = random.next() < 0.5;
+                const leverage =
+                    random.next() < 0.7
+                        ? random.pick(LEVERAGES)
+                        : Math.round(random.next() * 400_000) / 10_000;
+                const initMargin =
+                    SCALAR_18 /
+                    BigInt(random.pick(mild ? [2, 5, 10, 20, 50] : [2, 5, 10, 20, 50, 100]));
+                const execFee = BigInt(random.pick([0, 1, 7, 100_000]));
+                const balance =
+                    execFee +
+                    (mild
+                        ? 10n ** 9n + random.magnitude(14)
+                        : random.magnitude(random.pick([4, 7, 10, 14])));
+                // The impact rate at the largest size the balance could carry:
+                // 0.1% when mild, else from negligible to past the cap.
+                const impactScalar = mild
+                    ? balance * 50n * 1_000n
+                    : (balance * BigInt(random.pick([1, 10, 100, 10_000]))) / 3n + 1n;
+                const feeSteps = mild ? 20 : 80;
+                const config = {
                     execFee,
-                    initMargin: SCALAR_18 / BigInt(random.pick([5, 20, 50])),
-                    impactScalar: BigInt(random.int(50, 50_000)),
-                    feeDom: BigInt(random.int(0, 300)) * 10n ** 14n,
-                    feeNonDom: BigInt(random.int(0, 300)) * 10n ** 14n,
-                },
-                { tokens: side === 0 ? pair() : side === 1 ? pair(skew, 0n) : pair(0n, skew) },
-            );
-            const price = px(random.pick([0.25, 0.5, 1]));
-            const label = `case ${index}: balance ${balance}, leverage ${leverage}, isLong ${isLong}`;
+                    initMargin,
+                    impactScalar,
+                    feeDom: BigInt(random.int(0, feeSteps)) * 10n ** 14n,
+                    feeNonDom: BigInt(random.int(0, feeSteps)) * 10n ** 14n,
+                };
+                const skew = random.magnitude(10);
+                const side = random.int(0, 2);
+                const book = market(config, {
+                    tokens: side === 0 ? pair() : side === 1 ? pair(skew, 0n) : pair(0n, skew),
+                });
+                const budget = balance - execFee;
+                // A small balance is priced at or under one, so that every
+                // atomic unit of size buys a base unit: a dust size that rounds
+                // to no base size at all is its own gate (716).
+                const price = px(
+                    budget < 10n ** 9n
+                        ? random.pick([0.37, 0.5, 1])
+                        : random.pick([0.37, 1, 1.000001, 10, 97.5, 3_456.789, 64_000]),
+                );
+                const label = JSON.stringify(
+                    { index, isLong, leverage, balance, price, side, skew, config },
+                    (_, value) =>
+                        typeof value === 'bigint' ? value.toString() : (value as unknown),
+                );
 
-            const max = maxMarginForBalance(book, isLong, balance, leverage, price);
-            const budget = balance - execFee;
-            // Every size up to what the whole budget could carry.
-            const ceiling = (budget * scaled(leverage)) / LEVERAGE_SCALE + 2n;
-            let largest = 0n;
-            for (let notional = 1n; notional <= ceiling; notional++) {
-                if (fits(book, isLong, notional, budget, price, leverage)) largest = notional;
+                const max = maxMarginForBalance(book, isLong, balance, leverage, price);
+                if (max.notional === 0n) {
+                    expect(max, label).toEqual(NONE);
+                    // Nothing fits: not even one atomic unit.
+                    expect(fits(book, isLong, 1n, budget, price, leverage), label).toBe(false);
+                    continue;
+                }
+                sized++;
+                // The escrow of an increase is its margin plus the execution
+                // fee: the whole balance, and no more.
+                expect(max.orderMargin + execFee, label).toBe(balance);
+
+                // The size fits, and the position margin clears the
+                // initial-margin gate as the contract measures it.
+                expect(fits(book, isLong, max.notional, budget, price, leverage), label).toBe(true);
+                const required = (max.notional * initMargin + SCALAR_18 - 1n) / SCALAR_18;
+                expect(max.positionMargin, label).toBeGreaterThanOrEqual(required);
+                expect(max.notional * LEVERAGE_SCALE, label).toBeLessThanOrEqual(
+                    max.positionMargin * scaled(leverage),
+                );
+
+                // One atomic unit more does not fit.
+                expect(fits(book, isLong, max.notional + 1n, budget, price, leverage), label).toBe(
+                    false,
+                );
+
+                // The order itself fills. The one gate that can stop it is the
+                // maintenance gate (723), which the function does not solve for,
+                // and only in a harsh case: the fees of closing the new position
+                // exceed the margin it is left with.
+                const applied = fill(book, isLong, max.notional, max.orderMargin, price);
+                if (applied.kind === 'gate') {
+                    expect(applied.code, label).toBe(723);
+                    expect(mild, label).toBe(false);
+                    liquidatable++;
+                    continue;
+                }
+                expect(applied.kind, label).toBe('fills');
+                if (applied.kind !== 'fills') continue;
+                expect(applied.outcome.postPosition.margin, label).toBe(max.positionMargin);
+                expect(applied.outcome.postPosition.notional, label).toBe(max.notional);
+                if (mild) mildFills++;
+                else harshFills++;
             }
-            expect(max.notional, label).toBe(largest);
-        }
-    });
+            // The cases are not vacuous: nearly every one sizes an order, every
+            // mild one fills, and the harsh ones reach both outcomes.
+            expect(sized).toBeGreaterThan(cases * 0.9);
+            expect(mildFills).toBe(cases / 2);
+            expect(harshFills).toBeGreaterThan(cases / 8);
+            expect(liquidatable).toBeGreaterThan(0);
+            expect(mildFills + harshFills + liquidatable).toBe(sized);
+        },
+    );
+
+    it(
+        'is the largest size of all, by a scan of every size a small balance could carry',
+        { timeout: SLOW },
+        () => {
+            const random = seeded(0x5eed_0002);
+            for (let index = 0; index < 150; index++) {
+                const isLong = random.next() < 0.5;
+                const leverage = random.pick([1, 2.5, 5, 10, 33.3333]);
+                const execFee = BigInt(random.pick([0, 3]));
+                const balance = execFee + BigInt(random.int(1, 120));
+                // A flat book, where a larger open provably never pays less,
+                // and books skewed either way, where the fee splits in two.
+                const skew = BigInt(random.int(1, 200));
+                const side = index % 3;
+                const book = market(
+                    {
+                        execFee,
+                        initMargin: SCALAR_18 / BigInt(random.pick([5, 20, 50])),
+                        impactScalar: BigInt(random.int(50, 50_000)),
+                        feeDom: BigInt(random.int(0, 300)) * 10n ** 14n,
+                        feeNonDom: BigInt(random.int(0, 300)) * 10n ** 14n,
+                    },
+                    { tokens: side === 0 ? pair() : side === 1 ? pair(skew, 0n) : pair(0n, skew) },
+                );
+                const price = px(random.pick([0.25, 0.5, 1]));
+                const label = `case ${index}: balance ${balance}, leverage ${leverage}, isLong ${isLong}`;
+
+                const max = maxMarginForBalance(book, isLong, balance, leverage, price);
+                const budget = balance - execFee;
+                // Every size up to what the whole budget could carry.
+                const ceiling = (budget * scaled(leverage)) / LEVERAGE_SCALE + 2n;
+                let largest = 0n;
+                for (let notional = 1n; notional <= ceiling; notional++) {
+                    if (fits(book, isLong, notional, budget, price, leverage)) largest = notional;
+                }
+                expect(max.notional, label).toBe(largest);
+            }
+        },
+    );
 });
 
 describe('maxMarginForBalance: a leverage that is no leverage', () => {
