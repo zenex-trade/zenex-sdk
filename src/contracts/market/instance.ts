@@ -36,9 +36,9 @@ export interface MarketInstanceState {
 }
 
 /**
- * Throws unless `Config`, `FeedId`, `Status`, `Vault`, `Token`, `Oracle` and
- * `Treasury` are all set; the lazy keys fall back to `undefined` or a zeroed
- * `AdlState`.
+ * The lazy keys fall back to `undefined` or a zeroed `AdlState`.
+ * @throws {MarketStateError} `MISSING_STATE` unless `Config`, `FeedId`,
+ *   `Status`, `Vault`, `Token`, `Oracle` and `Treasury` are all set.
  */
 export function parseMarketInstance(
     instanceVal: xdr.ScVal,

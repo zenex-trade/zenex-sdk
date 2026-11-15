@@ -1,4 +1,5 @@
 import { Address, xdr } from '@stellar/stellar-sdk';
+import { MarketStateError } from '../entries.js';
 import { decodeEntryKey } from './keys.js';
 
 /**
@@ -10,7 +11,7 @@ export interface InstanceStorage {
     keys(): string[];
     /** Raw value for a key, or `undefined` when the contract has not set it. */
     get(name: string): xdr.ScVal | undefined;
-    /** As {@link get}, but throws `Error("<contract> instance is missing <name>")` if absent. */
+    /** As {@link get}, but throws a `MarketStateError` (`MISSING_STATE`, "<contract> instance is missing <name>") if absent. */
     require(name: string): xdr.ScVal;
     /** A required `Address` slot, as a strkey. Throws if `name` is absent, naming the contract. */
     address(name: string): string;
@@ -24,14 +25,19 @@ export interface InstanceStorage {
  * @param instanceVal - The `.val()` of a `ContractDataEntry` whose key is
  *   `scvLedgerKeyContractInstance`.
  * @param label - Contract name. Named in every error this call raises.
- * @throws If `instanceVal` is not a contract-instance value.
+ * @throws {MarketStateError} `MISSING_STATE` if `instanceVal` is not a
+ *   contract-instance value. The accessors that require a key throw the same
+ *   error when the key is absent.
  */
 export function instanceStorage(
     instanceVal: xdr.ScVal,
     label: string,
 ): InstanceStorage {
     if (instanceVal.switch() !== xdr.ScValType.scvContractInstance()) {
-        throw new Error(`expected a ${label} contract-instance value`);
+        throw new MarketStateError(
+            'MISSING_STATE',
+            `expected a ${label} contract-instance value`,
+        );
     }
 
     const entries = new Map<string, xdr.ScVal>();
@@ -49,7 +55,10 @@ export function instanceStorage(
     const require = (name: string): xdr.ScVal => {
         const value = entries.get(name);
         if (value === undefined) {
-            throw new Error(`${label} instance is missing ${name}`);
+            throw new MarketStateError(
+                'MISSING_STATE',
+                `${label} instance is missing ${name}`,
+            );
         }
         return value;
     };

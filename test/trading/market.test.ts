@@ -8,6 +8,7 @@ import { tokenBalanceLedgerKey } from '../../src/token.js';
 import { Status } from '../../src/contracts/market/types.js';
 import type { Network } from '../../src/index.js';
 import {
+    contractInstance,
     makeConfig,
     marketDataScVal,
     marketInstanceScVal,
@@ -233,6 +234,30 @@ describe('Market.load', () => {
         await expect(Market.load(network, contracts)).rejects.toThrow(
             /TTL-expired.*restore or extend/,
         );
+    });
+
+    it('keeps an entry live through its live-until ledger, inclusive', async () => {
+        // Soroban's rule: live while liveUntil >= ledger. Equal is still live.
+        mockEntries(marketEntries(contracts, { liveUntil: 4242 }), 4242);
+        const market = await Market.load(network, contracts);
+        expect(market.ledger).toBe(4242);
+        // One ledger later the same entry has lapsed.
+        mockEntries(marketEntries(contracts, { liveUntil: 4242 }), 4243);
+        await expect(Market.load(network, contracts)).rejects.toMatchObject({
+            name: 'MarketStateError',
+            code: 'MISSING_STATE',
+        });
+    });
+
+    it('fails closed with a typed error on an instance missing a required key', async () => {
+        // A market instance that holds nothing.
+        mockEntries(marketEntries(contracts, { instance: contractInstance([]) }));
+        const failure = await Market.load(network, contracts).catch((error) => error);
+        expect(failure).toBeInstanceOf(MarketStateError);
+        expect(failure).toMatchObject({
+            code: 'MISSING_STATE',
+            message: expect.stringContaining('market instance is missing'),
+        });
     });
 
     it('rejects contracts the market itself disagrees with', async () => {

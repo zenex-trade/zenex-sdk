@@ -3,14 +3,13 @@ import { rpc, xdr } from '@stellar/stellar-sdk';
 
 /** Codes for a failed state read. */
 export type MarketStateFailureCode =
-    | 'INVALID_INPUT'
     | 'MISSING_STATE'
     | 'IDENTITY_MISMATCH';
 
 /** A batched contract-state read could not produce a coherent result. */
 export class MarketStateError extends Error {
     constructor(
-        /** Why the read failed: an absent or archived entry, a wiring mismatch, or a bad input. */
+        /** Why the read failed: absent, archived or undecodable state (`MISSING_STATE`), or a wiring mismatch (`IDENTITY_MISMATCH`). */
         readonly code: MarketStateFailureCode,
         reason: string,
     ) {
@@ -81,6 +80,10 @@ export async function readEntries(
         });
     }
 
+    // Soroban keeps an entry live through its live-until ledger, inclusive:
+    // the host treats it as live while `liveUntil >= ledger` and as archived
+    // only once the ledger is past it. So an entry whose live-until equals
+    // the batch's ledger is still live at that ledger.
     const lapsed = (entry: ReturnedEntry): boolean =>
         entry.liveUntilLedgerSeq !== undefined &&
         entry.liveUntilLedgerSeq < ledger;

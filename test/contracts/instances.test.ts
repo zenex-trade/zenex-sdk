@@ -62,6 +62,13 @@ describe('instanceStorage', () => {
         expect(() => instanceStorage(contractInstance([]), 'oracle').address('Verifier'))
             .toThrow('oracle instance is missing Verifier');
     });
+
+    it('throws the typed state error, so a load fails closed with MISSING_STATE', () => {
+        expect(() => instanceStorage(contractInstance([]), 'oracle').require('Verifier'))
+            .toThrow(expect.objectContaining({ name: 'MarketStateError', code: 'MISSING_STATE' }));
+        expect(() => instanceStorage(xdr.ScVal.scvU32(1), 'oracle'))
+            .toThrow(expect.objectContaining({ name: 'MarketStateError', code: 'MISSING_STATE' }));
+    });
 });
 
 describe('parseTreasuryInstance', () => {
