@@ -451,9 +451,7 @@ math it mirrors:
 - [CHANGELOG.md](./CHANGELOG.md) lists each release and the contracts it
   binds.
 
-1.0.0 is the first release on npm. Users of the package's predecessor, which
-was installed from git, will find the changes in the changelog's migration
-section.
+1.0.0 is the first release on npm.
 
 ## Development
 
