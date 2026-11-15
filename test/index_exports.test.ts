@@ -310,7 +310,7 @@ describe('package root exports', () => {
 
     it('does not carry the extracted backend data and relay surface', () => {
         // The data-service client and relay request building moved to the
-        // frontend-internal zenex-data lib; the SDK is chain-only.
+        // application side; the SDK is chain-only.
         const sdk = SDK as Record<string, unknown>;
         expect(sdk.ZenexDataClient).toBeUndefined();
         expect(sdk.streamZenexEvents).toBeUndefined();
